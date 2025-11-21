@@ -4,7 +4,9 @@ This is a project that uses the Lucene API to search for a phrase in content ins
 
 ## Screenshots
 
-![App Screenshot]()
+![Search Results WITH Boolean Query](screenshots/intellij_output_1121.png)
+
+![Search Results WITHOUT Boolean Query](screenshots/intellij_output_1120.png)
 
 
 ## Documentation
