@@ -1,5 +1,6 @@
 package org.jsonsearch.lucene;
 
+import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.*;
 import org.apache.lucene.index.IndexWriter;
@@ -23,11 +24,11 @@ public class Indexer {
     private String current_procedure_id = "";
 
     // Initialize writer
-    public Indexer(String indexDirectoryPath) throws IOException {
+    public Indexer(String indexDirectoryPath, Analyzer analyzer) throws IOException {
         Directory indexDirectory = FSDirectory.open(Paths.get(indexDirectoryPath));
-        MyPhoneticAnalyzer phoneticAnalyzer = new MyPhoneticAnalyzer();
+
 //        StandardAnalyzer standardAnalyzer = new StandardAnalyzer();
-        IndexWriterConfig config = new IndexWriterConfig(phoneticAnalyzer);
+        IndexWriterConfig config = new IndexWriterConfig(analyzer);
         writer = new IndexWriter(indexDirectory, config);
     }
     public void close() throws IOException {
