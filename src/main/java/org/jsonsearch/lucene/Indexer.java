@@ -93,7 +93,6 @@ public class Indexer {
             if(fieldType.equals(String.class)) {
                 if(fieldName.equals(LuceneConstants.CONTENTS)) {
                     d.add(new TextField(fieldName, (String) fieldValue, Field.Store.YES));
-                    d.add(new TextField("exactContent",  (String) fieldValue, Field.Store.YES));
                 }
                 else{
                     d.add(new StringField(fieldName, (String) fieldValue, Field.Store.YES));
