@@ -12,8 +12,22 @@ Dependencies are downloaded using Maven from [here](https://repo.maven.apache.or
 
 ## Screenshots
 
+To Run:
+
+java StarWarsTester.java
+
+User prompt to enter search and index paths, then phrase:
+![User Prompt in Terminal](screenshots/intellij_output_user1124.png)
+
+Result
+![User Prompt Search Results in Terminal](screenshots/intellij_output_user21124.png)
+
+Other results
+
+1. Implementation w/ Boolean Query:
 ![Search Results WITH Boolean Query](screenshots/intellij_output_1121.png)
 
+2. Earlier Implementation w/o Boolean Query:
 ![Search Results WITHOUT Boolean Query](screenshots/intellij_output_1120.png)
 
 
