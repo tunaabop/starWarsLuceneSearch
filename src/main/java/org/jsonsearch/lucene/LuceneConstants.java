@@ -7,6 +7,6 @@ public class LuceneConstants {
     public static final String PROC_ID = "procedure_ID";
     public static final String START = "start";
     public static final String END = "end";
-    public static final int MAX_SEARCH = 10;
-    public static final int MIN_OCCUR = 2;
+    public static final int MAX_SEARCH = 3; // define # search results
+    public static final int MIN_OCCUR = 2; // define # times phrase has to have occurred
 }
