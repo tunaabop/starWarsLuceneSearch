@@ -51,7 +51,6 @@ public class StarWarsTester {
         // Searching
         System.out.println("Please enter the phrase to search (e.g. \"hyper space\"): ");
         String phrase = sc.nextLine(); // search phrase
-        // TODO implement spell checker
 
         // create a SpellChecker instance
         File spellIndexFile = new File("src/test/dictionaryIndex");
@@ -76,7 +75,7 @@ public class StarWarsTester {
         System.out.println("Searching for phrase: \"" + phrase + "\" found in procedures...");
         TopDocs exactWords1 = tester.exactWordSearch(phrase);
         TopDocs phoneticHits = tester.phoneticSearch(phrase);
-        // TODO: here we can perform analysis on hits found
+        // TODO: here we can perform analysis on scores
 
     }
 
