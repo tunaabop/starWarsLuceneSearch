@@ -14,7 +14,9 @@ import org.apache.lucene.util.QueryBuilder;
 import java.io.IOException;
 import java.io.StringReader;
 import java.nio.file.Paths;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 
 // This is the main searcher class that look for results both exact and similar in phonetics
@@ -47,8 +49,9 @@ public class Searcher {
     }
 
     // This method returns an ordered set of procedure IDs where hits are found; we can work on ranking procedure IDs here
-    public Set<String> getProcedures(TopDocs hits) throws IOException {
-        Set<String> uniqueProcedures = new LinkedHashSet<>();
+    public Map<String, Double> getProcedures(TopDocs hits) throws IOException {
+//        Set<String> uniqueProcedures = new LinkedHashSet<>();
+        Map<String, Double> procedureCounts = new LinkedHashMap<>();
         Set<Integer> uniqueDocs = new LinkedHashSet<>();
         for (ScoreDoc scoreDoc : hits.scoreDocs) {
             int docID = scoreDoc.doc;
@@ -59,14 +62,17 @@ public class Searcher {
             String start_speech = document.get(LuceneConstants.START);
             String end_speech = document.get(LuceneConstants.END);
             if (proc_id != null) {
-                uniqueProcedures.add(proc_id);
+                procedureCounts.put(proc_id, procedureCounts.getOrDefault(proc_id, (double)0) + (double)scoreDoc.score);
+//                uniqueProcedures.add(proc_id);
             }
             System.out.println(" From time "+ start_speech + " to " + end_speech +": ");
             displayTokenUsingStandardAnalyzer(document.get(LuceneConstants.CONTENTS));
         }
         System.out.println(" Significant docs have IDs of:" + uniqueDocs);
-        return uniqueProcedures;
+//        return uniqueProcedures;
+        return procedureCounts;
     }
+
 
     // This method analyzes a given query term to get its phonetic form
     private String getPhoneticTerm(String queryTerm) {
