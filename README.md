@@ -9,7 +9,7 @@ Dependencies are downloaded using Maven from [here](https://repo.maven.apache.or
   - [json-simple](https://mvnrepository.com/artifact/com.googlecode.json-simple/json-simple) for parsing json files into objects
   - [lucene-core-10.3.2](https://mvnrepository.com/artifact/org.apache.lucene/lucene-core/10.3.2) for index/query/search
   - [lucene-analyzers-phonetic](https://mvnrepository.com/artifact/org.apache.lucene/lucene-analyzers-phonetic) and [commons-codec](https://mvnrepository.com/artifact/commons-codec/commons-codec/1.20.0) for misheard/misspelled word search
-  -[lucene-suggest](https://mvnrepository.com/artifact/org.apache.lucene/lucene-suggest/10.3.2) for implementing a spell checker
+  - [lucene-suggest](https://mvnrepository.com/artifact/org.apache.lucene/lucene-suggest/10.3.2) for implementing a spell checker
 ## Screenshots
 
   To Run:
