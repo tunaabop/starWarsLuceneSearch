@@ -24,10 +24,10 @@ Dependencies are downloaded using Maven from [here](https://repo.maven.apache.or
 
   Other results
 
-    1. Implementation w/ Boolean Query:
-      ![Search Results WITH Boolean Query](screenshots/intellij_output_1121.png)
+  1. Implementation w/ Boolean Query:
+     ![Search Results WITH Boolean Query](screenshots/intellij_output_1121.png)
 
-    2. Earlier Implementation w/o Boolean Query:
-      ![Search Results WITHOUT Boolean Query](screenshots/intellij_output_1120.png)
+  2. Earlier Implementation w/o Boolean Query:
+     ![Search Results WITHOUT Boolean Query](screenshots/intellij_output_1120.png)
 
 
