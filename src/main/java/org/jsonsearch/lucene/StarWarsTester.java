@@ -1,6 +1,7 @@
 package org.jsonsearch.lucene;
 
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
+import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriterConfig;
@@ -14,6 +15,7 @@ import org.json.simple.parser.ParseException;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Paths;
+import java.util.Map;
 import java.util.Scanner;
 import java.util.Set;
 
@@ -71,10 +73,11 @@ public class StarWarsTester {
             }
         }
         spellChecker.close();
+
+        // Process results
         System.out.println("Top results for phrase: \"" + phrase + "\"");
-        Set<String> exactProcedures = tester.exactWordSearch(phrase);
-        Set<String> phoneticProcedures = tester.phoneticSearch(phrase);
-        // TODO: here we can perform analysis on scores
+        Map<String, Double> exactProcedures = tester.exactWordSearch(phrase);
+        Map<String, Double> phoneticProcedures = tester.phoneticSearch(phrase);
         if(exactWordHits.totalHits.value() + phoneticHits.totalHits.value() >= 1) {
             System.out.print(exactWordHits.totalHits.value() + " exact matches found. ");
             System.out.println("  in procedures: " + exactProcedures);
@@ -82,6 +85,9 @@ public class StarWarsTester {
             System.out.println("  in procedures: " + phoneticProcedures);
 
         }
+
+
+
 
     }
     public void setDataDir(String path) {
@@ -125,8 +131,8 @@ public class StarWarsTester {
     }
 
 
-    // Creates query based on phrase and prints how many hits found; returns TopDocs found
-    public Set<String> exactWordSearch(String phrase) throws IOException {
+    // Creates query based on exact phrase; returns found procedure IDs and total scores per ID
+    public Map<String, Double> exactWordSearch(String phrase) throws IOException {
         long startTime = System.currentTimeMillis();
         Searcher searcherExact = new Searcher(indexExactWordDir);
         Query query = searcherExact.createBooleanQuery(phrase, false); // here we can choose what type of Query to create
@@ -135,11 +141,12 @@ public class StarWarsTester {
 
         System.out.println("Searching took " + (endTime - startTime) + " ms");
 
+
         return searcherExact.getProcedures(exactWordHits);
     }
 
-    // Creates query based on phonetics of a phrase and prints how many hits found; returns TopDocs found
-    public Set<String> phoneticSearch(String phrase) throws IOException {
+    // Creates query based on phonetics of a phrase; returns found procedure IDs and total scores per ID
+    public Map<String, Double> phoneticSearch(String phrase) throws IOException {
         long startTime = System.currentTimeMillis();
         Searcher searcher = new Searcher(indexPhoneticDir);
         Query query = searcher.createBooleanQuery(phrase, true); // herre we can choose what type of Query to create
