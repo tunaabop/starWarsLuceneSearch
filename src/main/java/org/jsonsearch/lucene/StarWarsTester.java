@@ -26,7 +26,6 @@ public class StarWarsTester {
     Indexer indexer;
     static TopDocs phoneticHits;
     static TopDocs exactWordHits;
-    PhoneticSearcher searcherExact;
 
     public static void main(String[] args) throws IOException, ParseException {
         StarWarsTester tester = new StarWarsTester();
@@ -129,7 +128,7 @@ public class StarWarsTester {
     // Creates query based on phrase and prints how many hits found; returns TopDocs found
     public Set<String> exactWordSearch(String phrase) throws IOException {
         long startTime = System.currentTimeMillis();
-        PhoneticSearcher searcherExact = new PhoneticSearcher(indexExactWordDir);
+        Searcher searcherExact = new Searcher(indexExactWordDir);
         Query query = searcherExact.createBooleanQuery(phrase, false); // here we can choose what type of Query to create
         exactWordHits = searcherExact.search(query);
         long endTime = System.currentTimeMillis();
@@ -142,7 +141,7 @@ public class StarWarsTester {
     // Creates query based on phonetics of a phrase and prints how many hits found; returns TopDocs found
     public Set<String> phoneticSearch(String phrase) throws IOException {
         long startTime = System.currentTimeMillis();
-        PhoneticSearcher searcher = new PhoneticSearcher(indexPhoneticDir);
+        Searcher searcher = new Searcher(indexPhoneticDir);
         Query query = searcher.createBooleanQuery(phrase, true); // herre we can choose what type of Query to create
         phoneticHits = searcher.search(query);
         long endTime = System.currentTimeMillis();

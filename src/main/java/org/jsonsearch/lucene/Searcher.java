@@ -18,13 +18,13 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 // This is the main searcher class that look for results both exact and similar in phonetics
-public class PhoneticSearcher {
+public class Searcher {
     IndexSearcher indexSearcher;
     QueryBuilder queryBuilder;
     MyPhoneticAnalyzer phoneticAnalyzer;
     StandardAnalyzer standardAnalyzer;
 
-    public PhoneticSearcher(String indexDirectoryPath) throws IOException {
+    public Searcher(String indexDirectoryPath) throws IOException {
         DirectoryReader indexDirectory = DirectoryReader.open(FSDirectory.open(Paths.get(indexDirectoryPath)));
         indexSearcher = new IndexSearcher(indexDirectory);
         phoneticAnalyzer = new MyPhoneticAnalyzer();
