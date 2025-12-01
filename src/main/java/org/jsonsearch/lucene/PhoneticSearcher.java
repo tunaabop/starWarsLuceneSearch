@@ -104,17 +104,18 @@ public class PhoneticSearcher {
         BooleanQuery.Builder booleanQueryBuilder = new BooleanQuery.Builder();
 
         // Create Option Queries to add to Boolean query
-        FuzzyQuery fuzzyQuery = createFuzzyQuery(phrase);
-        WildcardQuery wildcardQuery = createWildcardQuery(phrase);
-        PrefixQuery prefixQuery = createPrefixQuery(phrase);
-        TermQuery termQuery = createBasicQuery(phrase);
         PhraseQuery phraseQuery;
         if(!isPhoneticSearch){
             phraseQuery = createExactPhraseQuery(phrase);
         }
         else{
             phraseQuery =  createPhoneticPhraseQuery(phrase);
+            phrase = getPhoneticTerm(phrase); // convert phrase to a phonetic phrase
         }
+        FuzzyQuery fuzzyQuery = createFuzzyQuery(phrase);
+        WildcardQuery wildcardQuery = createWildcardQuery(phrase);
+        PrefixQuery prefixQuery = createPrefixQuery(phrase);
+        TermQuery termQuery = createBasicQuery(phrase);
 
         // Add Queries to BooleanQuery using SHOULD = OR logic (phrase should match)
         booleanQueryBuilder.add(fuzzyQuery, BooleanClause.Occur.SHOULD);
@@ -167,18 +168,18 @@ public class PhoneticSearcher {
     }
 
     public FuzzyQuery createFuzzyQuery(String phrase) throws IOException {
-        Term fuzzyTerm = new Term(LuceneConstants.CONTENTS, getPhoneticTerm(phrase)+"~");
+        Term fuzzyTerm = new Term(LuceneConstants.CONTENTS, phrase+"~");
         return new FuzzyQuery(fuzzyTerm, 1);
     }
 
     public WildcardQuery createWildcardQuery(String phrase) throws IOException {
-        Term wildcardTerm = new Term(LuceneConstants.CONTENTS, getPhoneticTerm(phrase)+"*" );
+        Term wildcardTerm = new Term(LuceneConstants.CONTENTS, phrase+"*" );
 
         return new WildcardQuery(wildcardTerm);
     }
 
     public PrefixQuery createPrefixQuery(String phrase) throws IOException {
-        Term t = new Term(LuceneConstants.CONTENTS, getPhoneticTerm(phrase));
+        Term t = new Term(LuceneConstants.CONTENTS, phrase);
         return new PrefixQuery(t);
     }
 

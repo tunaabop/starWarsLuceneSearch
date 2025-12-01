@@ -72,7 +72,7 @@ public class StarWarsTester {
             }
         }
         spellChecker.close();
-        System.out.println("Searching for phrase: \"" + phrase + "\" found in procedures...");
+        System.out.println("Top results for phrase: \"" + phrase + "\"");
         Set<String> exactProcedures = tester.exactWordSearch(phrase);
         Set<String> phoneticProcedures = tester.phoneticSearch(phrase);
         // TODO: here we can perform analysis on scores
