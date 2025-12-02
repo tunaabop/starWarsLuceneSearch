@@ -22,6 +22,8 @@ Dependencies are downloaded using Maven from [here](https://repo.maven.apache.or
   Result
   ![User Prompt Search Results in Terminal](screenshots/intellij_output_user21124.png)
 
+  Spellchecker and Bookmark Tag IDs Ranked by Total Score
+  ![Spellchecker test and output bookmark tag IDs](screenshots/intellij_output_bookmarkscores.png)
   Other results
 
   1. Implementation w/ Boolean Query:
