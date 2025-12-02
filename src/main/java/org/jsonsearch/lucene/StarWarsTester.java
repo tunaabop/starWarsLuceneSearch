@@ -1,7 +1,6 @@
 package org.jsonsearch.lucene;
 
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriterConfig;
@@ -17,7 +16,6 @@ import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.Map;
 import java.util.Scanner;
-import java.util.Set;
 
 
 // Here we perform example tests on StarWards JSON files for indexing, querying, and searching
@@ -42,10 +40,14 @@ public class StarWarsTester {
             System.out.println("Please enter filepath for search files (default= \"src/main/resources\")");
             String dataPath = sc.nextLine();
             tester.setDataDir(dataPath);
-            // ask user to define where to store index for search purposes
-            System.out.println("Please enter filepath to store index: (default= \"src/test/index\")");
-            String indexPath = sc.nextLine();
-            tester.setPhoneticIndexDir(indexPath);
+            // ask user to define where to store phonetic index for search purposes
+            System.out.println("Please enter filepath to store index: (default= \"src/test/indexPhonetic\")");
+            String indexPhoneticPath = sc.nextLine();
+            tester.setPhoneticIndexDir(indexPhoneticPath);
+            // ask user to define where to store exact content index for search purposes
+            System.out.println("Please enter filepath to store index: (default= \"src/test/indexExactWord\")");
+            String indexExactPath = sc.nextLine();
+            tester.setPhoneticIndexDir(indexExactPath);
             // create index here
             tester.createPhoneticIndex();
             tester.createExactWordIndex();
@@ -75,19 +77,15 @@ public class StarWarsTester {
         spellChecker.close();
 
         // Process results
-        System.out.println("Top results for phrase: \"" + phrase + "\"");
-        Map<String, Double> exactProcedures = tester.exactWordSearch(phrase);
-        Map<String, Double> phoneticProcedures = tester.phoneticSearch(phrase);
+        System.out.println("Top " + LuceneConstants.MAX_SEARCH + " results for phrase: \"" + phrase + "\"");
+        Map<String, Double> exactResults = tester.exactWordSearch(phrase);
+        Map<String, Double> phoneticResults = tester.phoneticSearch(phrase);
         if(exactWordHits.totalHits.value() + phoneticHits.totalHits.value() >= 1) {
-            System.out.print(exactWordHits.totalHits.value() + " exact matches found. ");
-            System.out.println("  in procedures: " + exactProcedures);
-            System.out.print(phoneticHits.totalHits.value() + " similarities found. ");
-            System.out.println("  in procedures: " + phoneticProcedures);
-
+            System.out.print(exactWordHits.totalHits.value() + " exact matches found ");
+            System.out.println("with bookmark tags: " + exactResults);
+            System.out.print(phoneticHits.totalHits.value() + " similarities found ");
+            System.out.println("with bookmark tags: " + phoneticResults);
         }
-
-
-
 
     }
     public void setDataDir(String path) {
@@ -98,10 +96,7 @@ public class StarWarsTester {
         indexPhoneticDir = path;
     }
 
-    public String getPhoneticIndexDir() {
-        return indexPhoneticDir;
-    }
-
+    // use to access index created
     public String getExactIndexDir() {
         return indexExactWordDir;
     }
@@ -114,6 +109,8 @@ public class StarWarsTester {
         long startTime = System.currentTimeMillis();
         numIndexed = indexer.createIndex(dataDir, new JsonFileFilter());
         long endTime = System.currentTimeMillis();
+        System.out.println(numIndexed + " docs indexed");
+        System.out.println("Indexing exact content took " + (endTime - startTime) + " ms");
         indexer.close();
     }
 
@@ -125,38 +122,41 @@ public class StarWarsTester {
         long startTime = System.currentTimeMillis();
         numIndexed = indexer.createIndex(dataDir, new JsonFileFilter());
         long endTime = System.currentTimeMillis();
-        indexer.close();
         System.out.println(numIndexed + " docs indexed");
-        System.out.println("Indexing took " + (endTime - startTime) + " ms");
+        System.out.println("Indexing phonetics took " + (endTime - startTime) + " ms");
+        indexer.close();
     }
 
 
-    // Creates query based on exact phrase; returns found procedure IDs and total scores per ID
+    // Creates query based on exact phrase; returns found bookmark tags and total scores per tag
     public Map<String, Double> exactWordSearch(String phrase) throws IOException {
         long startTime = System.currentTimeMillis();
+
         Searcher searcherExact = new Searcher(indexExactWordDir);
         Query query = searcherExact.createBooleanQuery(phrase, false); // here we can choose what type of Query to create
         exactWordHits = searcherExact.search(query);
+
         long endTime = System.currentTimeMillis();
 
         System.out.println("Searching took " + (endTime - startTime) + " ms");
 
-
-        return searcherExact.getProcedures(exactWordHits);
+        return searcherExact.getBookmarks(exactWordHits);
     }
 
-    // Creates query based on phonetics of a phrase; returns found procedure IDs and total scores per ID
+    // Creates query based on phonetics of a phrase; returns found bookmark tags IDs and total scores per tag
     public Map<String, Double> phoneticSearch(String phrase) throws IOException {
         long startTime = System.currentTimeMillis();
+
         Searcher searcher = new Searcher(indexPhoneticDir);
-        Query query = searcher.createBooleanQuery(phrase, true); // herre we can choose what type of Query to create
+        Query query = searcher.createBooleanQuery(phrase, true); // here we can choose what type of Query to create
         phoneticHits = searcher.search(query);
+
         long endTime = System.currentTimeMillis();
 
         System.out.println("Searching took " + (endTime - startTime) + " ms");
 
 
-        return searcher.getProcedures(phoneticHits);
+        return searcher.getBookmarks(phoneticHits);
     }
 
 

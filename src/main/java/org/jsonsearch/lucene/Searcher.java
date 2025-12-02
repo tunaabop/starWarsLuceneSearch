@@ -48,29 +48,26 @@ public class Searcher {
         return indexSearcher.storedFields().document(scoreDoc.doc);
     }
 
-    // This method returns an ordered set of procedure IDs where hits are found; we can work on ranking procedure IDs here
-    public Map<String, Double> getProcedures(TopDocs hits) throws IOException {
-//        Set<String> uniqueProcedures = new LinkedHashSet<>();
-        Map<String, Double> procedureCounts = new LinkedHashMap<>();
+    // This method returns an ordered set of bookmark tag IDs where hits are found; TODO: we can work on ranking their relevance
+    public Map<String, Double> getBookmarks(TopDocs hits) throws IOException {
+        Map<String, Double> bookmarkCounts = new LinkedHashMap<>(); // linked hash map helps rank bookmarks by score
         Set<Integer> uniqueDocs = new LinkedHashSet<>();
         for (ScoreDoc scoreDoc : hits.scoreDocs) {
             int docID = scoreDoc.doc;
             uniqueDocs.add(docID);
-            System.out.print("Score: " + scoreDoc.score + " Doc ID:" + docID);
+//            System.out.print("Score: " + scoreDoc.score + " Doc ID:" + docID);
             Document document = this.getDocument(scoreDoc);
             String proc_id = document.get(LuceneConstants.BOOKMARK_TAG );
             String start_speech = document.get(LuceneConstants.START);
             String end_speech = document.get(LuceneConstants.END);
             if (proc_id != null) {
-                procedureCounts.put(proc_id, procedureCounts.getOrDefault(proc_id, (double)0) + (double)scoreDoc.score);
-//                uniqueProcedures.add(proc_id);
+                bookmarkCounts.put(proc_id, bookmarkCounts.getOrDefault(proc_id, (double)0) + (double)scoreDoc.score);
             }
             System.out.println(" From time "+ start_speech + " to " + end_speech +": ");
             displayTokenUsingStandardAnalyzer(document.get(LuceneConstants.CONTENTS));
         }
-        System.out.println(" Significant docs have IDs of:" + uniqueDocs);
-//        return uniqueProcedures;
-        return procedureCounts;
+//        System.out.println(" Significant docs have IDs of:" + uniqueDocs);
+        return bookmarkCounts;
     }
 
 
