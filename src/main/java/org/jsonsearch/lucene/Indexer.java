@@ -1,7 +1,6 @@
 package org.jsonsearch.lucene;
 
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.*;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
@@ -84,7 +83,7 @@ public class Indexer {
             String fieldName = (String) key;
             Object fieldValue = jsonObject.get(fieldName);
 
-            if(fieldName.equals(LuceneConstants.PROC_ID)) {
+            if(fieldName.equals(LuceneConstants.BOOKMARK_TAG )) {
                 current_procedure_id = (String) fieldValue;
 //                d.add(new StringField(fieldName, current_procedure_id, Field.Store.YES));
             }
@@ -119,7 +118,7 @@ public class Indexer {
         Document document = new Document();
         Field filenameField = new StringField(LuceneConstants.FILE_NAME, file.getName(), Field.Store.YES);
         Field filepathField = new StringField(LuceneConstants.FILE_PATH, file.getCanonicalPath(), Field.Store.YES);
-        Field procedureIDField = new StringField(LuceneConstants.PROC_ID, current_procedure_id, Field.Store.YES);
+        Field procedureIDField = new StringField(LuceneConstants.BOOKMARK_TAG, current_procedure_id, Field.Store.YES);
         document.add(filenameField);
         document.add(filepathField);
         document.add(procedureIDField);

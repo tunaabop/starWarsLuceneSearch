@@ -58,7 +58,7 @@ public class Searcher {
             uniqueDocs.add(docID);
             System.out.print("Score: " + scoreDoc.score + " Doc ID:" + docID);
             Document document = this.getDocument(scoreDoc);
-            String proc_id = document.get(LuceneConstants.PROC_ID);
+            String proc_id = document.get(LuceneConstants.BOOKMARK_TAG );
             String start_speech = document.get(LuceneConstants.START);
             String end_speech = document.get(LuceneConstants.END);
             if (proc_id != null) {
