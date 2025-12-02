@@ -17,7 +17,6 @@ import java.nio.file.Paths;
 import java.util.Map;
 import java.util.Scanner;
 
-
 // Here we perform example tests on StarWards JSON files for indexing, querying, and searching
 public class StarWarsTester {
     String indexPhoneticDir = "src/test/indexPhonetic";
@@ -57,7 +56,7 @@ public class StarWarsTester {
         System.out.println("Please enter the phrase to search (e.g. \"hyper space\"): ");
         String phrase = sc.nextLine(); // search phrase
 
-        // create a SpellChecker instance
+        // Spellchecker: create a SpellChecker instance
         File spellIndexFile = new File("src/test/dictionaryIndex");
         Directory spellIndexDir = FSDirectory.open(spellIndexFile.toPath());
         SpellChecker spellChecker = new SpellChecker(spellIndexDir);
@@ -76,16 +75,22 @@ public class StarWarsTester {
         }
         spellChecker.close();
 
+        printSeparator('*', 75);
+
         // Process results
         System.out.println("Top " + LuceneConstants.MAX_SEARCH + " results for phrase: \"" + phrase + "\"");
         Map<String, Double> exactResults = tester.exactWordSearch(phrase);
         Map<String, Double> phoneticResults = tester.phoneticSearch(phrase);
+
+        // print statements
+        printSeparator('=', 75);
         if(exactWordHits.totalHits.value() + phoneticHits.totalHits.value() >= 1) {
             System.out.print(exactWordHits.totalHits.value() + " exact matches found ");
             System.out.println("with bookmark tags: " + exactResults);
             System.out.print(phoneticHits.totalHits.value() + " similarities found ");
             System.out.println("with bookmark tags: " + phoneticResults);
         }
+        printSeparator('=', 75);
 
     }
     public void setDataDir(String path) {
@@ -105,12 +110,16 @@ public class StarWarsTester {
     public void createExactWordIndex() throws IOException, ParseException {
         StandardAnalyzer standardAnalyzer = new StandardAnalyzer();
         indexer = new Indexer(indexExactWordDir, standardAnalyzer);
+
         int numIndexed;
         long startTime = System.currentTimeMillis();
         numIndexed = indexer.createIndex(dataDir, new JsonFileFilter());
         long endTime = System.currentTimeMillis();
+
         System.out.println(numIndexed + " docs indexed");
         System.out.println("Indexing exact content took " + (endTime - startTime) + " ms");
+        printSeparator('*', 75);
+
         indexer.close();
     }
 
@@ -118,12 +127,16 @@ public class StarWarsTester {
     public void createPhoneticIndex() throws IOException, ParseException {
         MyPhoneticAnalyzer phoneticAnalyzer = new MyPhoneticAnalyzer();
         indexer = new Indexer(indexPhoneticDir, phoneticAnalyzer);
+
         int numIndexed;
         long startTime = System.currentTimeMillis();
         numIndexed = indexer.createIndex(dataDir, new JsonFileFilter());
         long endTime = System.currentTimeMillis();
+
         System.out.println(numIndexed + " docs indexed");
         System.out.println("Indexing phonetics took " + (endTime - startTime) + " ms");
+        printSeparator('*', 75);
+
         indexer.close();
     }
 
@@ -152,13 +165,19 @@ public class StarWarsTester {
         phoneticHits = searcher.search(query);
 
         long endTime = System.currentTimeMillis();
-
         System.out.println("Searching took " + (endTime - startTime) + " ms");
 
 
         return searcher.getBookmarks(phoneticHits);
     }
 
+    // Helper method to print a separator line
+    public static void printSeparator(char character, int length) {
+        for (int i = 0; i < length; i++) {
+            System.out.print(character);
+        }
+        System.out.println();
+    }
 
 
 }

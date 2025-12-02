@@ -40,7 +40,6 @@ public class Searcher {
         if(numHits < LuceneConstants.MIN_OCCUR) {
             System.out.println("No significant hits found (Min occur must be > " +  LuceneConstants.MIN_OCCUR + ")");
         }
-
         return hits;
     }
 
@@ -63,9 +62,11 @@ public class Searcher {
             if (proc_id != null) {
                 bookmarkCounts.put(proc_id, bookmarkCounts.getOrDefault(proc_id, (double)0) + (double)scoreDoc.score);
             }
-            System.out.println(" From time "+ start_speech + " to " + end_speech +": ");
-            displayTokenUsingStandardAnalyzer(document.get(LuceneConstants.CONTENTS));
+            System.out.print(" From time "+ start_speech + " to " + end_speech +": ");
+//            displayTokenUsingStandardAnalyzer(document.get(LuceneConstants.CONTENTS));
+            System.out.println(document.get(LuceneConstants.CONTENTS));
         }
+
 //        System.out.println(" Significant docs have IDs of:" + uniqueDocs);
         return bookmarkCounts;
     }
@@ -143,12 +144,15 @@ public class Searcher {
                 LuceneConstants.CONTENTS, new StringReader(phrase));
         CharTermAttribute term = tokenStream.addAttribute(CharTermAttribute.class);
         tokenStream.reset();
+
         while(tokenStream.incrementToken()) {
             builder.add(new Term(LuceneConstants.CONTENTS, term.toString()));
             System.out.print("[" + term.toString() + "] ");
         }
-        System.out.println();
+        printSeparator('-', 75);
+
         standardAnalyzer.close();
+
         builder.setSlop(2);
         PhraseQuery phraseQuery = builder.build();
         return phraseQuery;
@@ -159,14 +163,18 @@ public class Searcher {
                 LuceneConstants.CONTENTS, new StringReader(phrase));
         CharTermAttribute term = tokenStream.addAttribute(CharTermAttribute.class);
         tokenStream.reset();
+
         while(tokenStream.incrementToken()) {
             builder.add(new Term(LuceneConstants.CONTENTS, getPhoneticTerm(term.toString())));
             System.out.print("[" + term.toString() + "] ");
         }
-        System.out.println();
+        printSeparator('-', 75);
+
         phoneticAnalyzer.close();
+
         builder.setSlop(1);
         PhraseQuery phraseQuery = builder.build();
+
         return phraseQuery;
     }
 
@@ -186,6 +194,14 @@ public class Searcher {
         return new PrefixQuery(t);
     }
 
+    // Helper method to print a separator line
+    public static void printSeparator(char character, int length) {
+        System.out.println();
+        for (int i = 0; i < length; i++) {
+            System.out.print(character);
+        }
+        System.out.println();
+    }
 
 
 
