@@ -16,20 +16,21 @@ Dependencies are downloaded using Maven from [here](https://repo.maven.apache.or
 
   java StarWarsTester.java
 
-  User prompt to enter search and index paths, then phrase:
+
+  Spellchecker and Bookmark Tag IDs Ranked by Total Score (12/2/25)
+  ![Spellchecker test and output bookmark tag IDs](screenshots/intellij_output_bookmarkscores.png)
+  
+  Sample Output (11/24/25)
+  User Input Prompt
+  ![User Prompt Search Results in Terminal](screenshots/intellij_output_user21124.png)
   ![User Prompt in Terminal](screenshots/intellij_output_user1124.png)
 
-  Result
-  ![User Prompt Search Results in Terminal](screenshots/intellij_output_user21124.png)
-
-  Spellchecker and Bookmark Tag IDs Ranked by Total Score
-  ![Spellchecker test and output bookmark tag IDs](screenshots/intellij_output_bookmarkscores.png)
-  Other results
-
-  1. Implementation w/ Boolean Query:
+  Sample Output (11/21/25)
+  Implementation w/ Boolean Query:
      ![Search Results WITH Boolean Query](screenshots/intellij_output_1121.png)
 
-  2. Earlier Implementation w/o Boolean Query:
+  Sample Output (11/20/25)
+  Implementation w/o Boolean Query:
      ![Search Results WITHOUT Boolean Query](screenshots/intellij_output_1120.png)
 
 
