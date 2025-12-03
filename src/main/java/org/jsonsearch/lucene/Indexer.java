@@ -19,7 +19,7 @@ import java.nio.file.Paths;
 
 // This class performs lucene indexing for a JSON file
 public class Indexer {
-    private IndexWriter writer;
+    private final IndexWriter writer;
     private String current_procedure_id = "";
 
     // Initialize writer
@@ -36,13 +36,15 @@ public class Indexer {
 
     public int createIndex(String dataDirPath, FileFilter filter) throws IOException, ParseException {
         File[] files = new File(dataDirPath).listFiles();
-        for (File file : files) {
-            if(!file.isDirectory()
-            && !file.isHidden()
-            && file.exists()
-            && file.canRead()
-            && filter.accept(file)) {
-                indexFile(file);
+        if (files != null) {
+            for (File file : files) {
+                if(!file.isDirectory()
+                && !file.isHidden()
+                && file.exists()
+                && file.canRead()
+                && filter.accept(file)) {
+                    indexFile(file);
+                }
             }
         }
         return writer.getDocStats().numDocs;
@@ -60,7 +62,7 @@ public class Indexer {
         JSONParser  parser = new JSONParser();
         Object obj = parser.parse(new FileReader(file.getPath()));
         JSONArray jsonArray = new JSONArray();
-        jsonArray.add(obj);
+        boolean add = jsonArray.add(obj);
         parseJsonElement(jsonArray, file);
     }
 
@@ -89,7 +91,7 @@ public class Indexer {
             }
 
             // create fields based on type and add to document
-            Class fieldType = fieldValue.getClass();
+            Class<?> fieldType = fieldValue.getClass();
             if(fieldType.equals(String.class)) {
                 if(fieldName.equals(LuceneConstants.CONTENTS)) {
                     d.add(new TextField(fieldName, (String) fieldValue, Field.Store.YES));

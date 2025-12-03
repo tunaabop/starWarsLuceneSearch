@@ -17,6 +17,8 @@ import java.nio.file.Paths;
 import java.util.Map;
 import java.util.Scanner;
 
+import static org.jsonsearch.lucene.Searcher.printSeparator;
+
 // Here we perform example tests on StarWards JSON files for indexing, querying, and searching
 public class StarWarsTester {
     String indexPhoneticDir = "src/test/indexPhonetic";
@@ -26,7 +28,7 @@ public class StarWarsTester {
     static TopDocs phoneticHits;
     static TopDocs exactWordHits;
 
-    public static void main(String[] args) throws IOException, ParseException {
+     static void main() throws IOException, ParseException {
         StarWarsTester tester = new StarWarsTester();
 
         // Scanner for user input
@@ -171,13 +173,6 @@ public class StarWarsTester {
         return searcher.getBookmarks(phoneticHits);
     }
 
-    // Helper method to print a separator line
-    public static void printSeparator(char character, int length) {
-        for (int i = 0; i < length; i++) {
-            System.out.print(character);
-        }
-        System.out.println();
-    }
 
 
 }

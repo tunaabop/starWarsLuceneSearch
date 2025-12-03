@@ -9,4 +9,5 @@ public class LuceneConstants {
     public static final String END = "end";
     public static final int MAX_SEARCH = 5; // define # search results
     public static final int MIN_OCCUR = 2; // define # times phrase has to have occurred
+    public static final int PHRASE_QUERY_SLOP = 2;
 }
