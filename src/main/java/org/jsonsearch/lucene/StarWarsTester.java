@@ -81,42 +81,56 @@ public class StarWarsTester {
         System.out.println("Top results for phrase: \"" + phrase + "\"");
 
 
+         // Results for exact search phrase
+         LinkedHashMap<String, Double> exactResults = tester.exactWordSearch(phrase);
+         if (exactResults != null) {
+             tester.merge(finalResults, exactResults);
+             System.out.print(exactWordHits.totalHits.value() + " exact matches found ");
+             System.out.println("with bookmark tags: " + exactResults);
+         }
+         else{
+             System.out.println("No exact matches found");
+         }
+         printSeparator('=', 75);
+
+         // Results for phonetically similar phrase
+         System.out.println("Searching for similar phonetics...");
+         LinkedHashMap<String, Double> phoneticResults = tester.phoneticSearch(phrase);
+         if(phoneticResults != null) {
+             tester.merge(finalResults, phoneticResults);
+             System.out.print(phoneticHits.totalHits.value() + " similarities found ");
+             System.out.println("with bookmark tags: " + phoneticResults);
+         }
+         printSeparator('=', 75);
+
          // When search phrase is not found, this checks for fuzzy and wildcards for search phrase without using a query
          if (suggestions != null && suggestions.length > 0 && !spellChecker.exist(phrase)) { // only give suggestion when search word DNE
 //            System.out.println("Did you mean: " + suggestions[0] + " (y/n)?");  // only offer one suggestion
 //            if(sc.nextLine().equals("y")) {
 //                phrase = suggestions[0];
 //            }
+             System.out.println("Here are some suggestion searches:");
              for (int i =0; i < suggestions.length; i++) {
 
                  String current_suggestion = suggestions[i];
-                 System.out.println(i+1 + ". " + current_suggestion);
+                 System.out.print("Suggestion results for \"" + current_suggestion + "\": ");
 
                  LinkedHashMap<String, Double> similar_results = tester.exactWordSearch(current_suggestion);
-                 tester.merge(finalResults, similar_results);
-
-                 System.out.print(exactWordHits.totalHits.value() + " matches found ");
-                 System.out.println("with bookmark tags: " + similar_results);
+                 if (similar_results != null) {
+                     tester.merge(finalResults, similar_results);
+                     System.out.print(exactWordHits.totalHits.value() + " matches found ");
+                     System.out.println("with bookmark tags: " + similar_results);
+                 }
+                 else{
+                     System.out.println("n/a with MIN_OCCUR > " + LuceneConstants.MIN_OCCUR);
+                 }
                  printSeparator('-', 75);
              }
          }
 
-         printSeparator('=', 75);
+         // print final
 
-         // Results for search phrase and phonetically similar phrases
-         LinkedHashMap<String, Double> exactResults = tester.exactWordSearch(phrase);
-         LinkedHashMap<String, Double> phoneticResults = tester.phoneticSearch(phrase);
-         tester.merge(finalResults, exactResults);
-         tester.merge(finalResults, phoneticResults);
-
-         System.out.print(exactWordHits.totalHits.value() + " exact matches found ");
-         System.out.println("with bookmark tags: " + exactResults);
-         System.out.print(phoneticHits.totalHits.value() + " similarities found ");
-         System.out.println("with bookmark tags: " + phoneticResults);
-
-         printSeparator('=', 75);
-
-         System.out.println("Final result bookmark tags: " + finalResults);
+         System.out.println("FINAL BOOKMARK TAGS w/ SCORES: " + finalResults);
 
          spellChecker.close();
 
