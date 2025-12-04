@@ -47,8 +47,8 @@ public class Searcher {
     }
 
     // This method returns an ordered set of bookmark tag IDs where hits are found; TODO: we can work on ranking their relevance
-    public Map<String, Double> getBookmarks(TopDocs hits) throws IOException {
-        Map<String, Double> bookmarkCounts = new LinkedHashMap<>(); // linked hash map helps rank bookmarks by score
+    public LinkedHashMap<String, Double> getBookmarks(TopDocs hits) throws IOException {
+        LinkedHashMap<String, Double> bookmarkCounts = new LinkedHashMap<>(); // linked hash map helps rank bookmarks by score
         Set<Integer> uniqueDocs = new LinkedHashSet<>();
         for (ScoreDoc scoreDoc : hits.scoreDocs) {
             int docID = scoreDoc.doc;
@@ -108,8 +108,8 @@ public class Searcher {
         TermQuery termQuery = createBasicQuery(phrase);
 
         // Add Queries to BooleanQuery using SHOULD = OR logic (phrase should match)
-        booleanQueryBuilder.add(fuzzyQuery, BooleanClause.Occur.SHOULD);
-        booleanQueryBuilder.add(wildcardQuery, BooleanClause.Occur.SHOULD);
+//        booleanQueryBuilder.add(fuzzyQuery, BooleanClause.Occur.SHOULD);
+//        booleanQueryBuilder.add(wildcardQuery, BooleanClause.Occur.SHOULD);
         booleanQueryBuilder.add(prefixQuery, BooleanClause.Occur.SHOULD);
         booleanQueryBuilder.add(termQuery, BooleanClause.Occur.SHOULD);
         booleanQueryBuilder.add(phraseQuery, BooleanClause.Occur.SHOULD);
@@ -133,9 +133,9 @@ public class Searcher {
 
         while(tokenStream.incrementToken()) {
             builder.add(new Term(LuceneConstants.CONTENTS, term.toString()));
-            System.out.print("[" + term + "] ");
+//            System.out.print("[" + term + "] ");
         }
-        printSeparator('-', 75);
+//        printSeparator('-', 75);
 
         standardAnalyzer.close();
 
@@ -164,7 +164,7 @@ public class Searcher {
 
     public FuzzyQuery createFuzzyQuery(String phrase) {
         Term fuzzyTerm = new Term(LuceneConstants.CONTENTS, phrase+"~");
-        return new FuzzyQuery(fuzzyTerm, 1);
+        return new FuzzyQuery(fuzzyTerm, 2);
     }
 
     public WildcardQuery createWildcardQuery(String phrase) {
