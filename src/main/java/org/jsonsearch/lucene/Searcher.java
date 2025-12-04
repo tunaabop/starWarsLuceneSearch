@@ -37,7 +37,8 @@ public class Searcher {
         TopDocs hits = indexSearcher.search(query, LuceneConstants.MAX_SEARCH);
         int numHits = (int) hits.totalHits.value();
         if(numHits < LuceneConstants.MIN_OCCUR) {
-            System.out.println("No significant hits found (Min occur must be > " +  LuceneConstants.MIN_OCCUR + ")");
+            return null;
+//            System.out.println("No significant hits found (Min occur must be > " +  LuceneConstants.MIN_OCCUR + ")");
         }
         return hits;
     }
@@ -102,8 +103,8 @@ public class Searcher {
             phraseQuery =  createPhoneticPhraseQuery(phrase);
             phrase = getPhoneticTerm(phrase); // convert phrase to a phonetic phrase
         }
-        FuzzyQuery fuzzyQuery = createFuzzyQuery(phrase);
-        WildcardQuery wildcardQuery = createWildcardQuery(phrase);
+//        FuzzyQuery fuzzyQuery = createFuzzyQuery(phrase);
+//        WildcardQuery wildcardQuery = createWildcardQuery(phrase);
         PrefixQuery prefixQuery = createPrefixQuery(phrase);
         TermQuery termQuery = createBasicQuery(phrase);
 
@@ -180,7 +181,6 @@ public class Searcher {
 
     // Helper method to print a separator line
     public static void printSeparator(char character, int length) {
-        System.out.println();
         for (int i = 0; i < length; i++) {
             System.out.print(character);
         }
