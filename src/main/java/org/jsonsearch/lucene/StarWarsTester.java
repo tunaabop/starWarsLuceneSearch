@@ -21,14 +21,14 @@ import static org.jsonsearch.lucene.Searcher.printSeparator;
 
 // Here we perform example tests on StarWards JSON files for indexing, querying, and searching
 public class StarWarsTester {
-    String indexPhoneticDir = "src/test/indexPhonetic";
-    String indexExactWordDir = "src/test/indexExactWord";
-    String dataDir = "src/main/resources";
-    Indexer indexer;
     static TopDocs phoneticHits;
     static TopDocs exactWordHits;
+    String indexPhoneticDir = "src/test/indexPhonetic"; //default
+    String indexExactWordDir = "src/test/indexExactWord"; //default
+    String dataDir = "src/main/resources"; //default TODO: test with difference dir
+    Indexer indexer;
 
-     static void main() throws IOException, ParseException {
+    static void main() throws IOException, ParseException {
         StarWarsTester tester = new StarWarsTester();
 
         // Scanner for user input
@@ -36,7 +36,7 @@ public class StarWarsTester {
 
         // Indexing
         System.out.println("Would you like to index search files? (y/n)");
-        if(sc.nextLine().equals("y")) {
+        if (sc.nextLine().equals("y")) {
             // ask user to define which files to look for
             System.out.println("Please enter filepath for search files (default= \"src/main/resources\")");
             String dataPath = sc.nextLine();
@@ -74,69 +74,69 @@ public class StarWarsTester {
         String[] suggestions = spellChecker.suggestSimilar(phrase, numSuggestions);
 
 
-     // Process results
+        // Process results
 
         System.out.println("Top results for phrase: \"" + phrase + "\"");
 
-         // Results for exact search phrase
-         LinkedHashMap<String, Double> exactResults = tester.exactWordSearch(phrase);
-         if (exactResults != null) {
-             tester.merge(finalResults, exactResults);
-             System.out.print(exactWordHits.totalHits.value() + " exact matches found ");
-             System.out.println("with bookmark tags: " + exactResults);
-         }
-         else{
-             System.out.println("No exact matches found");
-         }
-         printSeparator('=', 75);
+        // Results for exact search phrase
+        LinkedHashMap<String, Double> exactResults = tester.exactWordSearch(phrase);
+        if (exactResults != null) {
+            tester.merge(finalResults, exactResults);
+            System.out.print(exactWordHits.totalHits.value() + " exact matches found ");
+            System.out.println("with bookmark tags: " + exactResults);
+        } else {
+            System.out.println("No exact matches found");
+        }
+        printSeparator('=', 75);
 
-         // Results for phonetically similar phrase
-         System.out.println("Searching for similar phonetics...");
-         LinkedHashMap<String, Double> phoneticResults = tester.phoneticSearch(phrase);
-         if(phoneticResults != null) {
-             tester.merge(finalResults, phoneticResults);
-             System.out.print(phoneticHits.totalHits.value() + " similarities found ");
-             System.out.println("with bookmark tags: " + phoneticResults);
-         }
-         printSeparator('=', 75);
+        // Results for phonetically similar phrase
+        System.out.println("Searching for similar phonetics...");
+        LinkedHashMap<String, Double> phoneticResults = tester.phoneticSearch(phrase);
+        if (phoneticResults != null) {
+            tester.merge(finalResults, phoneticResults);
+            System.out.print(phoneticHits.totalHits.value() + " similarities found ");
+            System.out.println("with bookmark tags: " + phoneticResults);
+        }
+        printSeparator('=', 75);
 
-         // When search phrase is not found, this checks for fuzzy and wildcards for search phrase without using a query
-         if (suggestions != null && suggestions.length > 0 && !spellChecker.exist(phrase)) { // only give suggestion when search word DNE
-             System.out.println("Here are some suggestion searches:");
-             for (int i =0; i < suggestions.length; i++) {
+        // When search phrase is not found, this checks for fuzzy and wildcards for search phrase without using a query
+        if (suggestions != null && suggestions.length > 0 && !spellChecker.exist(phrase)) { // only give suggestion when search word DNE
+            System.out.println("Here are some suggestion searches:");
+            for (int i = 0; i < suggestions.length; i++) {
 
-                 String current_suggestion = suggestions[i];
-                 System.out.print("Suggestion results for \"" + current_suggestion + "\": ");
+                String current_suggestion = suggestions[i];
+                System.out.print("Suggestion results for \"" + current_suggestion + "\": ");
 
-                 LinkedHashMap<String, Double> similar_results = tester.exactWordSearch(current_suggestion);
-                 if (similar_results != null) {
-                     tester.merge(finalResults, similar_results);
-                     System.out.print(exactWordHits.totalHits.value() + " matches found ");
-                     System.out.println("with bookmark tags: " + similar_results);
-                 }
-                 else{
-                     System.out.println("n/a with MIN_OCCUR > " + LuceneConstants.MIN_OCCUR);
-                 }
-                 printSeparator('-', 75);
-             }
-         }
+                LinkedHashMap<String, Double> similar_results = tester.exactWordSearch(current_suggestion);
+                if (similar_results != null) {
+                    tester.merge(finalResults, similar_results);
+                    System.out.print(exactWordHits.totalHits.value() + " matches found ");
+                    System.out.println("with bookmark tags: " + similar_results);
+                } else {
+                    System.out.println("n/a with MIN_OCCUR > " + LuceneConstants.MIN_OCCUR);
+                }
+                printSeparator('-', 75);
+            }
+        }
 
-         // print final
-         finalResults = (LinkedHashMap<String, Double>) tester.sortByValue(finalResults); // sort bookmarks by score
-         System.out.println("FINAL BOOKMARK TAGS w/ SCORES: " + finalResults);
+        // print final
+        finalResults = (LinkedHashMap<String, Double>) tester.sortByValue(finalResults); // sort bookmarks by score
+        System.out.println("FINAL BOOKMARK TAGS w/ SCORES: " + finalResults);
 
-         spellChecker.close();
+        spellChecker.close();
 
     }
+
     public void setDataDir(String path) {
-         dataDir = path;
+        dataDir = path;
     }
 
     public void setPhoneticIndexDir(String path) {
         indexPhoneticDir = path;
     }
+
     public void setExactWordIndexDir(String path) {
-         indexExactWordDir = path;
+        indexExactWordDir = path;
     }
 
     // use to access index created
@@ -186,7 +186,7 @@ public class StarWarsTester {
         Searcher searcherExact = new Searcher(indexExactWordDir);
         Query query = searcherExact.createBooleanQuery(phrase, false); // here we can choose what type of Query to create
         exactWordHits = searcherExact.search(query);
-        if(exactWordHits == null){
+        if (exactWordHits == null) {
             return null;
         }
 
@@ -205,20 +205,19 @@ public class StarWarsTester {
         Query query = searcher.createBooleanQuery(phrase, true); // here we can choose what type of Query to create
         phoneticHits = searcher.search(query);
 
-        if(phoneticHits == null){
+        if (phoneticHits == null) {
             return null;
         }
 
         long endTime = System.currentTimeMillis();
         System.out.println("Searching took " + (endTime - startTime) + " ms");
 
-
         return searcher.getBookmarks(phoneticHits);
     }
 
-//Methods for map organization
+// Methods for map organization
 
-    // To combine results into a single map
+    // Combines results into a single map
     private void merge(LinkedHashMap<String, Double> map1, LinkedHashMap<String, Double> map2) {
         for (Map.Entry<String, Double> entry : map2.entrySet()) {
             String key = entry.getKey();
@@ -232,24 +231,16 @@ public class StarWarsTester {
         }
     }
 
-    // Sorts bookmap:score map from highest score to lowest
+    // Sorts bookmark tags from highest score to lowest
     private Map<String, Double> sortByValue(LinkedHashMap<String, Double> map) {
         List<Map.Entry<String, Double>> entries =
                 new ArrayList<Map.Entry<String, Double>>(map.entrySet());
-        Collections.sort(entries, new Comparator<Map.Entry<String, Double>>() {
-            public int compare(Map.Entry<String, Double> a, Map.Entry<String, Double> b){
-                return b.getValue().compareTo(a.getValue());
-            }
-        });
+        entries.sort((a, b) -> b.getValue().compareTo(a.getValue()));
         Map<String, Double> sortedMap = new LinkedHashMap<String, Double>();
         for (Map.Entry<String, Double> entry : entries) {
             sortedMap.put(entry.getKey(), entry.getValue());
         }
-       return sortedMap;
-
+        return sortedMap;
 
     }
-
-
-
 }

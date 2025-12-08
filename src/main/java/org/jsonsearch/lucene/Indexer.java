@@ -87,7 +87,6 @@ public class Indexer {
 
             if(fieldName.equals(LuceneConstants.BOOKMARK_TAG )) {
                 current_procedure_id = (String) fieldValue;
-//                d.add(new StringField(fieldName, current_procedure_id, Field.Store.YES));
             }
 
             // create fields based on type and add to document
