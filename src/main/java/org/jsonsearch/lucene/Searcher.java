@@ -6,6 +6,7 @@ import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.Term;
+import org.apache.lucene.sandbox.search.PhraseWildcardQuery;
 import org.apache.lucene.search.*;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.util.QueryBuilder;
@@ -23,20 +24,18 @@ public class Searcher {
     IndexSearcher indexSearcher;
     QueryBuilder queryBuilder;
     MyPhoneticAnalyzer phoneticAnalyzer;
-    StandardAnalyzer standardAnalyzer;
 
     public Searcher(String indexDirectoryPath) throws IOException {
         DirectoryReader indexDirectory = DirectoryReader.open(FSDirectory.open(Paths.get(indexDirectoryPath)));
         indexSearcher = new IndexSearcher(indexDirectory);
         phoneticAnalyzer = new MyPhoneticAnalyzer();
-        standardAnalyzer = new StandardAnalyzer();
         queryBuilder = new QueryBuilder(phoneticAnalyzer);
     }
 
     public TopDocs search(Query query) throws IOException {
         TopDocs hits = indexSearcher.search(query, LuceneConstants.MAX_SEARCH);
         int numHits = (int) hits.totalHits.value();
-        if(numHits < LuceneConstants.MIN_OCCUR) {
+        if (numHits < LuceneConstants.MIN_OCCUR) {
             return null;
 //            System.out.println("No significant hits found (Min occur must be > " +  LuceneConstants.MIN_OCCUR + ")");
         }
@@ -56,13 +55,13 @@ public class Searcher {
             uniqueDocs.add(docID);
 //            System.out.print("Score: " + scoreDoc.score + " Doc ID:" + docID);
             Document document = this.getDocument(scoreDoc);
-            String proc_id = document.get(LuceneConstants.BOOKMARK_TAG );
+            String proc_id = document.get(LuceneConstants.BOOKMARK_TAG);
             String start_speech = document.get(LuceneConstants.START);
             String end_speech = document.get(LuceneConstants.END);
             if (proc_id != null) {
-                bookmarkCounts.put(proc_id, bookmarkCounts.getOrDefault(proc_id, (double)0) + (double)scoreDoc.score);
+                bookmarkCounts.put(proc_id, bookmarkCounts.getOrDefault(proc_id, (double) 0) + (double) scoreDoc.score);
             }
-            System.out.print(" From time "+ start_speech + " to " + end_speech +": ");
+            System.out.print(" From time " + start_speech + " to " + end_speech + ": ");
 //            displayTokenUsingStandardAnalyzer(document.get(LuceneConstants.CONTENTS));
             System.out.println(document.get(LuceneConstants.CONTENTS));
         }
@@ -95,25 +94,31 @@ public class Searcher {
         BooleanQuery.Builder booleanQueryBuilder = new BooleanQuery.Builder();
 
         // Create Option Queries to add to Boolean query
-        PhraseQuery phraseQuery;
-        if(!isPhoneticSearch){
+        Query phraseQuery;
+        if (!isPhoneticSearch) {
             phraseQuery = createExactPhraseQuery(phrase);
-        }
-        else{
-            phraseQuery =  createPhoneticPhraseQuery(phrase);
+        } else {
+            phraseQuery = createPhoneticPhraseQuery(phrase);
             phrase = getPhoneticTerm(phrase); // convert phrase to a phonetic phrase
         }
-//        FuzzyQuery fuzzyQuery = createFuzzyQuery(phrase);
-//        WildcardQuery wildcardQuery = createWildcardQuery(phrase);
-        PrefixQuery prefixQuery = createPrefixQuery(phrase);
-        TermQuery termQuery = createBasicQuery(phrase);
+
+        // check for fuzzy
+        if(phrase.contains("~")){
+            Query fuzzyQuery = createFuzzyQuery(phrase);
+            booleanQueryBuilder.add(fuzzyQuery, BooleanClause.Occur.MUST);
+        }
+
+        // check for wildcards
+        if(phrase.contains("*") || phrase.contains("?")) {
+            Query wildcardPhraseQuery = createPhraseWildcardQuery(phrase);
+            booleanQueryBuilder.add(wildcardPhraseQuery, BooleanClause.Occur.MUST);
+
+        }
 
         // Add Queries to BooleanQuery using SHOULD = OR logic (phrase should match)
-//        booleanQueryBuilder.add(fuzzyQuery, BooleanClause.Occur.SHOULD);
-//        booleanQueryBuilder.add(wildcardQuery, BooleanClause.Occur.SHOULD);
-        booleanQueryBuilder.add(prefixQuery, BooleanClause.Occur.SHOULD);
-        booleanQueryBuilder.add(termQuery, BooleanClause.Occur.SHOULD);
         booleanQueryBuilder.add(phraseQuery, BooleanClause.Occur.SHOULD);
+
+
 
         return booleanQueryBuilder.build(); // return combined fuzzy and wildcard query
     }
@@ -125,14 +130,15 @@ public class Searcher {
         return new TermQuery(t);
     }
 
-    public PhraseQuery createExactPhraseQuery(String phrase) throws IOException {
+    public Query createExactPhraseQuery(String phrase) throws IOException {
+        StandardAnalyzer standardAnalyzer = new StandardAnalyzer();
         PhraseQuery.Builder builder = new PhraseQuery.Builder();
         TokenStream tokenStream = standardAnalyzer.tokenStream(
                 LuceneConstants.CONTENTS, new StringReader(phrase));
         CharTermAttribute term = tokenStream.addAttribute(CharTermAttribute.class);
         tokenStream.reset();
 
-        while(tokenStream.incrementToken()) {
+        while (tokenStream.incrementToken()) {
             builder.add(new Term(LuceneConstants.CONTENTS, term.toString()));
 //            System.out.print("[" + term + "] ");
         }
@@ -141,8 +147,9 @@ public class Searcher {
         standardAnalyzer.close();
 
         builder.setSlop(LuceneConstants.PHRASE_QUERY_SLOP); // default to 2
-        return builder.build(); // this returns a PhraseQuery instance
+        return createBoostQuery(builder.build()); // this returns a PhraseQuery instance
     }
+
     public PhraseQuery createPhoneticPhraseQuery(String phrase) throws IOException {
         PhraseQuery.Builder builder = new PhraseQuery.Builder();
         TokenStream tokenStream = phoneticAnalyzer.tokenStream(
@@ -150,7 +157,7 @@ public class Searcher {
         CharTermAttribute term = tokenStream.addAttribute(CharTermAttribute.class);
         tokenStream.reset();
 
-        while(tokenStream.incrementToken()) {
+        while (tokenStream.incrementToken()) {
             builder.add(new Term(LuceneConstants.CONTENTS, getPhoneticTerm(term.toString())));
             System.out.print("[" + term + "] ");
         }
@@ -163,20 +170,47 @@ public class Searcher {
         return builder.build(); // return PhraseQuery instance
     }
 
-    public FuzzyQuery createFuzzyQuery(String phrase) {
-        Term fuzzyTerm = new Term(LuceneConstants.CONTENTS, phrase+"~");
-        return new FuzzyQuery(fuzzyTerm, 2);
+    public Query createFuzzyQuery(String phrase) {
+        Term fuzzyTerm = new Term(LuceneConstants.CONTENTS, phrase);
+        return createBoostQuery(new FuzzyQuery(fuzzyTerm, 2));
     }
 
     public WildcardQuery createWildcardQuery(String phrase) {
-        Term wildcardTerm = new Term(LuceneConstants.CONTENTS, phrase+"*" );
+        Term wildcardTerm = new Term(LuceneConstants.CONTENTS, phrase + "*");
 
         return new WildcardQuery(wildcardTerm);
+    }
+
+    public Query createPhraseWildcardQuery(String phrase) throws IOException {
+        PhraseWildcardQuery.Builder builder = new PhraseWildcardQuery.Builder(LuceneConstants.CONTENTS, 2);
+        String[] words = phrase.split("\\s+"); // split words by one/more whitespace
+        for(String word : words) {
+            if(word.equals("*") || word.equals("~")) {
+               String phraseWithoutWildcard = phrase.replace("*", "").replace("?", "");
+               return createExactPhraseQuery(phraseWithoutWildcard); // create phrase query if a term in phrase is a wildcard
+            }
+            if (word.contains("*") || word.contains("?")) { // If the term contains a wildcard, create a MultiTermQuery
+                // e.g. PrefixQuery used here for terms starting with a prefix; might need a full WildcardQuery depending on placement of '*'
+                MultiTermQuery multiTermQuery = new WildcardQuery(new Term(LuceneConstants.CONTENTS, word)); // Simplified
+                System.out.println(word.replace("*", "").replace("?", ""));
+                builder.addMultiTerm(multiTermQuery);
+            }
+            else {
+                // For a regular term, add it directly
+                builder.addTerm(new Term(LuceneConstants.CONTENTS, word));
+            }
+        }
+        return createBoostQuery(builder.build());
     }
 
     public PrefixQuery createPrefixQuery(String phrase) {
         Term t = new Term(LuceneConstants.CONTENTS, phrase);
         return new PrefixQuery(t);
+    }
+
+    // Helps boost certain queries to have better score than others
+    public Query createBoostQuery(Query query) {
+        return new BoostQuery(query, 100.0f);
     }
 
     // Helper method to print a separator line
@@ -186,7 +220,6 @@ public class Searcher {
         }
         System.out.println();
     }
-
 
 
 }
