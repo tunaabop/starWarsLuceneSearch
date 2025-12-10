@@ -92,7 +92,7 @@ public class Indexer {
                 System.out.println(bookmarkTag);
                 bookmarkTag = (String) fieldValue;
             }
-            // add bookmark tag after collected
+            // add bookmark tag after collected, add it to every doc that has indexed text, since bookmark tag is not specified per text
             d.add(new StringField(LuceneConstants.BOOKMARK_TAG, bookmarkTag, Field.Store.YES));
 
             // create fields based on type and add to document

@@ -28,8 +28,31 @@ public class StarWarsTester {
     String dataDir = "src/main/resources"; //default TODO: test with difference dir
     Indexer indexer;
 
+    // Runtime-tunable boosts with defaults from constants
+    private float boostExact = LuceneConstants.BOOST_EXACT;
+    private float boostPhonetic = LuceneConstants.BOOST_PHONETIC;
+    private float boostWildcard = LuceneConstants.BOOST_WILDCARD;
+    private float boostFuzzy = LuceneConstants.BOOST_FUZZY;
+
+    private int totalHits = 0;
+
     public static void main(String[] args) throws IOException, ParseException {
         StarWarsTester tester = new StarWarsTester();
+
+        // Parse CLI flags for boosts: --boostExact= --boostPhonetic= --boostWildcard= --boostFuzzy=
+        for (String arg : args) {
+            if (arg.startsWith("--boostExact=")) {
+                parseBoost(arg.substring("--boostExact=".length()), "BOOST_EXACT", v -> tester.boostExact = v);
+            } else if (arg.startsWith("--boostPhonetic=")) {
+                parseBoost(arg.substring("--boostPhonetic=".length()), "BOOST_PHONETIC", v -> tester.boostPhonetic = v);
+            } else if (arg.startsWith("--boostWildcard=")) {
+                parseBoost(arg.substring("--boostWildcard=".length()), "BOOST_WILDCARD", v -> tester.boostWildcard = v);
+            } else if (arg.startsWith("--boostFuzzy=")) {
+                parseBoost(arg.substring("--boostFuzzy=".length()), "BOOST_FUZZY", v -> tester.boostFuzzy = v);
+            }
+        }
+        System.out.println(String.format("Active boosts -> exact: %.3f, phonetic: %.3f, wildcard: %.3f, fuzzy: %.3f",
+                tester.boostExact, tester.boostPhonetic, tester.boostWildcard, tester.boostFuzzy));
 
         // Scanner for user input
         Scanner sc = new Scanner(System.in);
@@ -69,17 +92,17 @@ public class StarWarsTester {
              IndexReader indexReader = DirectoryReader.open(mainIndexDir);
              StandardAnalyzer standardAnalyzer = new StandardAnalyzer()) {
             spellChecker.indexDictionary(new LuceneDictionary(indexReader, LuceneConstants.CONTENTS), new IndexWriterConfig(standardAnalyzer), true);
-            int numSuggestions = 5;
+            int numSuggestions = 2;
             suggestions = spellChecker.suggestSimilar(phrase, numSuggestions);
             
             // Results for exact search phrase
             LinkedHashMap<String, Double> exactResults = tester.exactWordSearch(phrase);
             if (exactResults != null) {
+                int numMatches = (int) exactWordHits.totalHits.value();
                 tester.merge(finalResults, exactResults);
-                System.out.print(exactWordHits.totalHits.value() + " exact matches found ");
+                System.out.print(numMatches + " exact matches found ");
                 System.out.println("with bookmark tags: " + exactResults);
-            } else {
-                System.out.println("No exact matches found");
+                tester.totalHits = tester.totalHits + numMatches;
             }
             printSeparator('=', 75);
 
@@ -87,9 +110,11 @@ public class StarWarsTester {
             System.out.println("Searching for similar phonetics...");
             LinkedHashMap<String, Double> phoneticResults = tester.phoneticSearch(phrase);
             if (phoneticResults != null) {
+                int numMatches = (int) phoneticHits.totalHits.value();
                 tester.merge(finalResults, phoneticResults);
                 System.out.print(phoneticHits.totalHits.value() + " similarities found ");
                 System.out.println("with bookmark tags: " + phoneticResults);
+                tester.totalHits = tester.totalHits + numMatches;
             }
             printSeparator('=', 75);
 
@@ -100,11 +125,11 @@ public class StarWarsTester {
                     System.out.print("Suggestion results for \"" + current_suggestion + "\": ");
                     LinkedHashMap<String, Double> similar_results = tester.exactWordSearch(current_suggestion);
                     if (similar_results != null) {
+                        int numMatches = (int) exactWordHits.totalHits.value();
                         tester.merge(finalResults, similar_results);
                         System.out.print(exactWordHits.totalHits.value() + " matches found ");
                         System.out.println("with bookmark tags: " + similar_results);
-                    } else {
-                        System.out.println("n/a with MIN_OCCUR > " + LuceneConstants.MIN_OCCUR);
+                        tester.totalHits = tester.totalHits + numMatches;
                     }
                     printSeparator('-', 75);
                 }
@@ -113,12 +138,18 @@ public class StarWarsTester {
 
 
         // Process results
+        if(tester.totalHits > LuceneConstants.MIN_OCCUR) {
+            System.out.println("Top results for phrase: \"" + phrase + "\"");
 
-        System.out.println("Top results for phrase: \"" + phrase + "\"");
+            // print final
+            finalResults = (LinkedHashMap<String, Double>) tester.sortByValue(finalResults); // sort bookmarks by score
+            System.out.println("FINAL BOOKMARK TAGS w/ SCORES: " + finalResults);
+        }
+        else{
+            System.out.println("No significant results with MIN_OCCUR > " + LuceneConstants.MIN_OCCUR);
 
-        // print final
-        finalResults = (LinkedHashMap<String, Double>) tester.sortByValue(finalResults); // sort bookmarks by score
-        System.out.println("FINAL BOOKMARK TAGS w/ SCORES: " + finalResults);
+        }
+
 
     }
 
@@ -181,11 +212,12 @@ public class StarWarsTester {
         long startTime = System.currentTimeMillis();
         LinkedHashMap<String, Double> result;
         try (Searcher searcherExact = new Searcher(indexExactWordDir)) {
+            searcherExact.setBoosts(boostExact, boostPhonetic, boostWildcard, boostFuzzy);
             Query query = searcherExact.createBooleanQuery(phrase, false); // here we can choose what type of Query to create
             exactWordHits = searcherExact.search(query);
-            if (exactWordHits.totalHits.value() < LuceneConstants.MIN_OCCUR) {
-                return null;
-            }
+//            if (exactWordHits.totalHits.value() < LuceneConstants.MIN_OCCUR) {
+//                return null;
+//            }
             result = searcherExact.getBookmarks(exactWordHits);
         }
         long endTime = System.currentTimeMillis();
@@ -199,6 +231,7 @@ public class StarWarsTester {
         long startTime = System.currentTimeMillis();
         LinkedHashMap<String, Double> result;
         try (Searcher searcher = new Searcher(indexPhoneticDir)) {
+            searcher.setBoosts(boostExact, boostPhonetic, boostWildcard, boostFuzzy);
             Query query = searcher.createBooleanQuery(phrase, true); // here we can choose what type of Query to create
             phoneticHits = searcher.search(query);
             if (phoneticHits.totalHits.value() < LuceneConstants.MIN_OCCUR) {
@@ -238,5 +271,15 @@ public class StarWarsTester {
         }
         return sortedMap;
 
+    }
+
+    // Utility to parse boost values safely
+    private static void parseBoost(String value, String name, java.util.function.Consumer<Float> setter) {
+        try {
+            float f = Float.parseFloat(value);
+            setter.accept(f);
+        } catch (NumberFormatException e) {
+            System.out.println("[WARN] Invalid value for " + name + ": '" + value + "'. Using default.");
+        }
     }
 }
