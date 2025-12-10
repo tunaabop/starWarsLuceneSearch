@@ -24,9 +24,23 @@ public class Searcher implements Closeable {
     private final IndexSearcher indexSearcher;
     private final DirectoryReader reader;
 
+    // Tunable boosts (default from LuceneConstants)
+    private float boostExact = LuceneConstants.BOOST_EXACT;
+    private float boostPhonetic = LuceneConstants.BOOST_PHONETIC;
+    private float boostWildcard = LuceneConstants.BOOST_WILDCARD;
+    private float boostFuzzy = LuceneConstants.BOOST_FUZZY;
+
     public Searcher(String indexDirectoryPath) throws IOException {
         this.reader = DirectoryReader.open(FSDirectory.open(Paths.get(indexDirectoryPath)));
         this.indexSearcher = new IndexSearcher(reader);
+    }
+
+    // Allow callers to tune boosts at runtime
+    public void setBoosts(float exact, float phonetic, float wildcard, float fuzzy) {
+        this.boostExact = exact;
+        this.boostPhonetic = phonetic;
+        this.boostWildcard = wildcard;
+        this.boostFuzzy = fuzzy;
     }
 
     public TopDocs search(Query query) throws IOException {
@@ -93,20 +107,19 @@ public class Searcher implements Closeable {
         // check for fuzzy
         if(phrase.contains("~")){
             Query fuzzyQuery = createFuzzyQuery(phrase);
-            booleanQueryBuilder.add(fuzzyQuery, BooleanClause.Occur.MUST);
+            booleanQueryBuilder.add(fuzzyQuery, BooleanClause.Occur.SHOULD);
         }
 
         // check for wildcards
         if(phrase.contains("*") || phrase.contains("?")) {
             Query wildcardPhraseQuery = createPhraseWildcardQuery(phrase);
-            booleanQueryBuilder.add(wildcardPhraseQuery, BooleanClause.Occur.MUST);
-
+            booleanQueryBuilder.add(wildcardPhraseQuery, BooleanClause.Occur.SHOULD);
         }
 
         // Add Queries to BooleanQuery using SHOULD = OR logic (phrase should match)
         booleanQueryBuilder.add(phraseQuery, BooleanClause.Occur.SHOULD);
-
-
+        // ensure at least one of the SHOULD clauses matches
+        booleanQueryBuilder.setMinimumNumberShouldMatch(1);
 
         return booleanQueryBuilder.build(); // return combined fuzzy and wildcard query
     }
@@ -130,10 +143,10 @@ public class Searcher implements Closeable {
             }
         }
         builder.setSlop(LuceneConstants.PHRASE_QUERY_SLOP); // default to 2
-        return createBoostQuery(builder.build()); // this returns a PhraseQuery instance
+        return createBoostQuery(builder.build(), boostExact); // this returns a boosted PhraseQuery
     }
 
-    public PhraseQuery createPhoneticPhraseQuery(String phrase) throws IOException {
+    public Query createPhoneticPhraseQuery(String phrase) throws IOException {
         PhraseQuery.Builder builder = new PhraseQuery.Builder();
         try (MyPhoneticAnalyzer analyzer = new MyPhoneticAnalyzer();
              TokenStream tokenStream = analyzer.tokenStream(
@@ -146,12 +159,13 @@ public class Searcher implements Closeable {
             }
         }
         builder.setSlop(LuceneConstants.PHRASE_QUERY_SLOP);
-        return builder.build(); // return PhraseQuery instance
+        // return boosted phonetic phrase
+        return createBoostQuery(builder.build(), boostPhonetic);
     }
 
     public Query createFuzzyQuery(String phrase) {
         Term fuzzyTerm = new Term(LuceneConstants.CONTENTS, phrase);
-        return createBoostQuery(new FuzzyQuery(fuzzyTerm, 2));
+        return createBoostQuery(new FuzzyQuery(fuzzyTerm, 2), boostFuzzy);
     }
 
     public WildcardQuery createWildcardQuery(String phrase) {
@@ -164,7 +178,7 @@ public class Searcher implements Closeable {
         PhraseWildcardQuery.Builder builder = new PhraseWildcardQuery.Builder(LuceneConstants.CONTENTS, 2);
         String[] words = phrase.split("\\s+"); // split words by one/more whitespace
         for(String word : words) {
-            if(word.equals("*") || word.equals("~")) {
+            if(word.equals("*") || word.equals("?")) {
                String phraseWithoutWildcard = phrase.replace("*", "").replace("?", "");
                return createExactPhraseQuery(phraseWithoutWildcard); // create phrase query if a term in phrase is a wildcard
             }
@@ -179,7 +193,7 @@ public class Searcher implements Closeable {
                 builder.addTerm(new Term(LuceneConstants.CONTENTS, word));
             }
         }
-        return createBoostQuery(builder.build());
+        return createBoostQuery(builder.build(), boostWildcard);
     }
 
     public PrefixQuery createPrefixQuery(String phrase) {
@@ -188,8 +202,8 @@ public class Searcher implements Closeable {
     }
 
     // Helps boost certain queries to have better score than others
-    public Query createBoostQuery(Query query) {
-        return new BoostQuery(query, 100.0f);
+    public Query createBoostQuery(Query query, float boost) {
+        return new BoostQuery(query, boost);
     }
 
     // Helper method to print a separator line
