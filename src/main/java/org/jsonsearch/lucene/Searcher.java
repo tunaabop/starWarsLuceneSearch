@@ -30,6 +30,12 @@ public class Searcher implements Closeable {
     private float boostWildcard = LuceneConstants.BOOST_WILDCARD;
     private float boostFuzzy = LuceneConstants.BOOST_FUZZY;
 
+    // Runtime query params
+    private int maxSearch = LuceneConstants.MAX_SEARCH;
+    private int phraseSlop = LuceneConstants.PHRASE_QUERY_SLOP;
+    private int minShouldMatch = 1;
+    private int fuzzyEdits = 2;
+
     public Searcher(String indexDirectoryPath) throws IOException {
         this.reader = DirectoryReader.open(FSDirectory.open(Paths.get(indexDirectoryPath)));
         this.indexSearcher = new IndexSearcher(reader);
@@ -43,35 +49,32 @@ public class Searcher implements Closeable {
         this.boostFuzzy = fuzzy;
     }
 
+    // Allow callers to tune general query parameters at runtime
+    public void setQueryParams(int maxSearch, int phraseSlop, int minShouldMatch, int fuzzyEdits) {
+        if (maxSearch > 0) this.maxSearch = maxSearch;
+        if (phraseSlop >= 0) this.phraseSlop = phraseSlop;
+        if (minShouldMatch >= 0) this.minShouldMatch = minShouldMatch;
+        if (fuzzyEdits >= 0 && fuzzyEdits <= 2) this.fuzzyEdits = fuzzyEdits;
+    }
+
     public TopDocs search(Query query) throws IOException {
-        return indexSearcher.search(query, LuceneConstants.MAX_SEARCH);
+        return indexSearcher.search(query, this.maxSearch);
     }
 
     public Document getDocument(ScoreDoc scoreDoc) throws IOException {
         return indexSearcher.storedFields().document(scoreDoc.doc);
     }
 
-    // This method returns an ordered set of bookmark tag IDs where hits are found; TODO: we can work on ranking their relevance
+    // This method aggregates bookmark tag IDs with cumulative scores;
     public LinkedHashMap<String, Double> getBookmarks(TopDocs hits) throws IOException {
         LinkedHashMap<String, Double> bookmarkCounts = new LinkedHashMap<>(); // linked hash map helps rank bookmarks by score
-        Set<Integer> uniqueDocs = new LinkedHashSet<>();
         for (ScoreDoc scoreDoc : hits.scoreDocs) {
-            int docID = scoreDoc.doc;
-            uniqueDocs.add(docID);
-//            System.out.print("Score: " + scoreDoc.score + " Doc ID:" + docID);
             Document document = this.getDocument(scoreDoc);
             String proc_id = document.get(LuceneConstants.BOOKMARK_TAG);
-            String start_speech = document.get(LuceneConstants.START);
-            String end_speech = document.get(LuceneConstants.END);
             if (proc_id != null) {
                 bookmarkCounts.put(proc_id, bookmarkCounts.getOrDefault(proc_id, (double) 0) + (double) scoreDoc.score);
             }
-            System.out.print(" From time " + start_speech + " to " + end_speech + ": ");
-//            displayTokenUsingStandardAnalyzer(document.get(LuceneConstants.CONTENTS));
-            System.out.println(document.get(LuceneConstants.CONTENTS));
         }
-
-        System.out.println(" Significant docs have IDs of:" + uniqueDocs);
         return bookmarkCounts;
     }
 
@@ -118,8 +121,8 @@ public class Searcher implements Closeable {
 
         // Add Queries to BooleanQuery using SHOULD = OR logic (phrase should match)
         booleanQueryBuilder.add(phraseQuery, BooleanClause.Occur.SHOULD);
-        // ensure at least one of the SHOULD clauses matches
-        booleanQueryBuilder.setMinimumNumberShouldMatch(1);
+        // ensure at least one of the SHOULD clauses matches (configurable)
+        booleanQueryBuilder.setMinimumNumberShouldMatch(this.minShouldMatch);
 
         return booleanQueryBuilder.build(); // return combined fuzzy and wildcard query
     }
@@ -142,7 +145,7 @@ public class Searcher implements Closeable {
                 builder.add(new Term(LuceneConstants.CONTENTS, term.toString()));
             }
         }
-        builder.setSlop(LuceneConstants.PHRASE_QUERY_SLOP); // default to 2
+        builder.setSlop(this.phraseSlop);
         return createBoostQuery(builder.build(), boostExact); // this returns a boosted PhraseQuery
     }
 
@@ -158,34 +161,23 @@ public class Searcher implements Closeable {
                 builder.add(new Term(LuceneConstants.CONTENTS, term.toString()));
             }
         }
-        builder.setSlop(LuceneConstants.PHRASE_QUERY_SLOP);
+        builder.setSlop(this.phraseSlop);
         // return boosted phonetic phrase
         return createBoostQuery(builder.build(), boostPhonetic);
     }
 
     public Query createFuzzyQuery(String phrase) {
         Term fuzzyTerm = new Term(LuceneConstants.CONTENTS, phrase);
-        return createBoostQuery(new FuzzyQuery(fuzzyTerm, 2), boostFuzzy);
-    }
-
-    public WildcardQuery createWildcardQuery(String phrase) {
-        Term wildcardTerm = new Term(LuceneConstants.CONTENTS, phrase + "*");
-
-        return new WildcardQuery(wildcardTerm);
+        return createBoostQuery(new FuzzyQuery(fuzzyTerm, this.fuzzyEdits), boostFuzzy);
     }
 
     public Query createPhraseWildcardQuery(String phrase) throws IOException {
-        PhraseWildcardQuery.Builder builder = new PhraseWildcardQuery.Builder(LuceneConstants.CONTENTS, 2);
+        PhraseWildcardQuery.Builder builder = new PhraseWildcardQuery.Builder(LuceneConstants.CONTENTS, this.phraseSlop);
         String[] words = phrase.split("\\s+"); // split words by one/more whitespace
         for(String word : words) {
-            if(word.equals("*") || word.equals("?")) {
-               String phraseWithoutWildcard = phrase.replace("*", "").replace("?", "");
-               return createExactPhraseQuery(phraseWithoutWildcard); // create phrase query if a term in phrase is a wildcard
-            }
             if (word.contains("*") || word.contains("?")) { // If the term contains a wildcard, create a MultiTermQuery
                 // e.g. PrefixQuery used here for terms starting with a prefix; might need a full WildcardQuery depending on placement of '*'
                 MultiTermQuery multiTermQuery = new WildcardQuery(new Term(LuceneConstants.CONTENTS, word)); // Simplified
-                System.out.println(word.replace("*", "").replace("?", ""));
                 builder.addMultiTerm(multiTermQuery);
             }
             else {
