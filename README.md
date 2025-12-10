@@ -62,8 +62,8 @@ public static void main(String[] args) throws IOException, ParseException
 At startup you’ll be prompted:
 1) Whether to build indexes (y/n)
    - Data path for JSON files (default: `src/main/resources`)
-   - Output path for exact match index (default: `src/test/indexExactWord`)
-   - Output path for phonetic index (default: `src/test/indexPhonetic`)
+   - Output path for exact match index (default: `target/index/indexExactWord`)
+   - Output path for phonetic index (default: `target/index/indexPhonetic`)
 2) Enter the phrase to search (e.g., `hyper space`)
 
 What happens under the hood:
@@ -71,6 +71,41 @@ What happens under the hood:
 - Phonetic index is built to enable Double Metaphone matching
 - Spell suggestions are generated using Lucene’s `SpellChecker` over the exact index’s dictionary
 - Results are merged and ranked into final bookmark tag IDs with scores
+
+### Runtime flags (CLI)
+All search behavior can be tuned at runtime by passing flags via Maven Exec:
+
+- Boosts (influence ranking order):
+  - `--boostExact=<float>` (default from code)
+  - `--boostPhonetic=<float>`
+  - `--boostWildcard=<float>`
+  - `--boostFuzzy=<float>`
+
+- Query/search parameters:
+  - `--maxSearch=<int>` maximum number of results to retrieve
+  - `--slop=<int>` phrase query slop
+  - `--minShouldMatch=<int>` minimum number of SHOULD clauses to match in the boolean query
+  - `--fuzzyEdits=<0|1|2>` Levenshtein distance for fuzzy queries
+  - `--minOccur=<int>` minimum total hits threshold used by the CLI to decide whether to print “significant” results
+
+- Spellchecker controls:
+  - `--rebuildSpellIndex` (boolean switch) force rebuilding the spellchecker dictionary index
+  - `--spellSuggestionsPerTerm=<int>` suggestions per token (default 2)
+  - `--maxSuggestionCombos=<int>` cap on the number of combined suggestion phrases (default 5)
+
+Examples:
+```
+# Minimal run
+mvn -q exec:java
+
+# Tune boosts and query params
+mvn -q exec:java -Dexec.args="--boostExact=4 --boostPhonetic=1.5 --boostWildcard=1.1 --boostFuzzy=0.5 --maxSearch=25 --slop=2 --minShouldMatch=1 --fuzzyEdits=2 --minOccur=2"
+
+# Spell suggestions tuning and rebuild
+mvn -q exec:java -Dexec.args="--rebuildSpellIndex --spellSuggestionsPerTerm=3 --maxSuggestionCombos=8"
+```
+
+The app echoes the effective settings at startup for visibility.
 
 ## Configuration
 Key constants are defined in `src/main/java/org/jsonsearch/lucene/LuceneConstants.java`:
@@ -81,9 +116,20 @@ Key constants are defined in `src/main/java/org/jsonsearch/lucene/LuceneConstant
 
 Default directories (can be overridden at runtime):
 - Data: `src/main/resources`
-- Exact index: `src/test/indexExactWord`
-- Phonetic index: `src/test/indexPhonetic`
-- Spellchecker dictionary index base: `src/test/dictionaryIndex`
+- Exact index: `target/index/indexExactWord`
+- Phonetic index: `target/index/indexPhonetic`
+- Spellchecker dictionary index: `target/index/dictionaryIndex`
+
+### How spell suggestions work
+- The spell index is built from the exact content index terms and is reused across runs.
+- Pass `--rebuildSpellIndex` to force a rebuild after data changes.
+- The app tokenizes your input phrase, suggests per‑term corrections using Lucene `SpellChecker`,
+  and then combines them into candidate phrases with a cap (`--maxSuggestionCombos`) to avoid combinatorial explosion.
+
+### Boosting and ranking
+- Queries are composed with SHOULD clauses so results can match via exact, phonetic, wildcard, or fuzzy paths.
+- Default boosts prioritize exact > phonetic > wildcard > fuzzy. You can adjust these via the boost flags above
+  to tune ranking to your dataset.
 
 ## Input data
 Two example JSON files are provided:
@@ -95,9 +141,11 @@ Each JSON object is parsed and indexed, focusing on the `text` field.
 ## Dependencies
 Managed by Maven. Key libraries (aligned to `pom.xml`):
 - `org.apache.lucene:lucene-core:10.3.1`
+- `org.apache.lucene:lucene-analysis-common:10.3.1`
 - `org.apache.lucene:lucene-queryparser:10.3.1`
 - `org.apache.lucene:lucene-suggest:10.3.1` (for `SpellChecker`)
-- `org.apache.lucene:lucene-analyzers-phonetic:8.11.4` (Double Metaphone)
+- `org.apache.lucene:lucene-analysis-phonetic:10.3.1` (Double Metaphone)
+- `org.apache.lucene:lucene-sandbox:10.3.1` (e.g., `PhraseWildcardQuery`)
 - `commons-codec:commons-codec:1.20.0`
 - `com.googlecode.json-simple:json-simple:1.1.1`
 
