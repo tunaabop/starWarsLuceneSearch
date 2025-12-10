@@ -405,10 +405,45 @@ public class StarWarsTester {
             if (combined.isEmpty()) break;
         }
 
+        // Heuristic: also consider concatenated and hyphenated forms like "hyperspace" and "hyper-space"
+        // These are common corrections when the original input had a space.
+        String joined = String.join("", terms);
+        String hyphenated = String.join("-", terms);
+        // Add direct exists or top suggestions for these forms
+        if (!joined.equalsIgnoreCase(phrase)) {
+            if (spellChecker.exist(joined)) {
+                combined.add(joined);
+            } else {
+                String[] sugg = spellChecker.suggestSimilar(joined, perTerm);
+                if (sugg != null) {
+                    for (String s : sugg) {
+                        combined.add(s);
+                    }
+                }
+            }
+        }
+        if (!hyphenated.equalsIgnoreCase(phrase)) {
+            if (spellChecker.exist(hyphenated)) {
+                combined.add(hyphenated);
+            } else {
+                String[] sugg = spellChecker.suggestSimilar(hyphenated, perTerm);
+                if (sugg != null) {
+                    for (String s : sugg) {
+                        combined.add(s);
+                    }
+                }
+            }
+        }
+
         // Deduplicate and remove the original phrase if present, but keep order
         LinkedHashSet<String> uniq = new LinkedHashSet<>(combined);
         uniq.remove(phrase);
-        return new ArrayList<>(uniq);
+        // Respect maxCombos cap on the final list as well
+        List<String> out = new ArrayList<>(uniq);
+        if (out.size() > maxCombos) {
+            return out.subList(0, maxCombos);
+        }
+        return out;
     }
 
     // Simple value object to return search results

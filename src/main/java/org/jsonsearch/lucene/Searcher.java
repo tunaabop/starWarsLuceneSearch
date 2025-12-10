@@ -71,9 +71,15 @@ public class Searcher implements Closeable {
         for (ScoreDoc scoreDoc : hits.scoreDocs) {
             Document document = this.getDocument(scoreDoc);
             String proc_id = document.get(LuceneConstants.BOOKMARK_TAG);
+            String start_speech = document.get(LuceneConstants.START);
+            String end_speech = document.get(LuceneConstants.END);
             if (proc_id != null) {
                 bookmarkCounts.put(proc_id, bookmarkCounts.getOrDefault(proc_id, (double) 0) + (double) scoreDoc.score);
             }
+            System.out.print(" From time "+ start_speech + " to " + end_speech +": ");
+            System.out.print(" From time " + start_speech + " to " + end_speech + ": ");
+//            displayTokenUsingStandardAnalyzer(document.get(LuceneConstants.CONTENTS));
+            System.out.println(document.get(LuceneConstants.CONTENTS));
         }
         return bookmarkCounts;
     }
