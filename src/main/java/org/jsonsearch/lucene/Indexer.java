@@ -43,10 +43,10 @@ public class Indexer {
         if (files != null) {
             for (File file : files) {
                 if(!file.isDirectory()
-                && !file.isHidden()
-                && file.exists()
-                && file.canRead()
-                && filter.accept(file)) {
+                        && !file.isHidden()
+                        && file.exists()
+                        && file.canRead()
+                        && filter.accept(file)) {
                     indexFile(file);
                 }
             }
