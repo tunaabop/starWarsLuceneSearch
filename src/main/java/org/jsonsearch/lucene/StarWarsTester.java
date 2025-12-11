@@ -160,7 +160,7 @@ public class StarWarsTester {
             printSeparator('=', 75);
 
             // When search phrase is not found, or when < min occur, suggest alternatives
-            if ((suggestions != null && !suggestions.isEmpty()) || tester.totalHits < tester.minOccur) {
+            if ((suggestions != null && !suggestions.isEmpty()) && tester.totalHits < tester.minOccur) {
                 System.out.println("Here are some suggestion searches:");
                 for (String current_suggestion : suggestions) {
                     System.out.print("Suggestion results for \"" + current_suggestion + "\": ");

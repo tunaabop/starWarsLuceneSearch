@@ -20,7 +20,11 @@ import java.nio.file.Paths;
 // This class performs lucene indexing for a JSON file
 public class Indexer {
     private final IndexWriter writer;
-    private String bookmarkTag = "";
+    // Per-file parsing context holder to avoid mutable instance state
+    private static final class ParseContext {
+        final String bookmarkTag;
+        ParseContext(String bookmarkTag) { this.bookmarkTag = bookmarkTag != null ? bookmarkTag : ""; }
+    }
 
     // Initialize writer
     public Indexer(String indexDirectoryPath, Analyzer analyzer) throws IOException {
@@ -60,67 +64,63 @@ public class Indexer {
     // To parse JSON file into a JSONArray object
     private void parseJSONFile(File file) throws IOException, ParseException {
         JSONParser  parser = new JSONParser();
-        Object obj = parser.parse(new FileReader(file.getPath()));
-        JSONArray jsonArray = new JSONArray();
-        boolean add = jsonArray.add(obj);
-        parseJsonElement(jsonArray, file);
+        Object root = parser.parse(new FileReader(file.getPath()));
+        // Determine bookmark tag once per file (root-level or first occurrence)
+        String bookmark = findBookmarkTagFirst(root);
+        ParseContext ctx = new ParseContext(bookmark);
+        parseJsonElement(root, file, ctx);
     }
 
     // Recursively parse json file
-    private void parseJsonElement(Object element, File file) throws IOException, ParseException {
-        if(element instanceof JSONObject){
-            parseJsonObject((JSONObject) element, file);
-        }
-        else if(element instanceof JSONArray jsonArray){
-            for(Object obj:  jsonArray) {
-                parseJsonElement(obj, file); // recursive call
+    private void parseJsonElement(Object element, File file, ParseContext ctx) throws IOException, ParseException {
+        if (element instanceof JSONObject jsonObject) {
+            parseJsonObject(jsonObject, file, ctx);
+        } else if (element instanceof JSONArray jsonArray) {
+            for (Object obj : jsonArray) {
+                parseJsonElement(obj, file, ctx); // recursive call
             }
         }
     }
 
     // This method will parse a single json object -- process and add fields to a new lucene doc (indexing)
-    private void parseJsonObject(JSONObject jsonObject, File file) throws IOException, ParseException {
+    private void parseJsonObject(JSONObject jsonObject, File file, ParseContext ctx) throws IOException, ParseException {
         // Create a new document and add universal fields first
         Document d = createLuceneDocument(file);
 
+        // Add bookmark tag exactly once per document using the file-scoped context
+        d.add(new StringField(LuceneConstants.BOOKMARK_TAG, ctx.bookmarkTag, Field.Store.YES));
 
         for (Object key : jsonObject.keySet()) {
             String fieldName = (String) key;
             Object fieldValue = jsonObject.get(fieldName);
 
-            if (LuceneConstants.BOOKMARK_TAG.equals(fieldName) && fieldValue instanceof String) {
-                System.out.println(bookmarkTag);
-                bookmarkTag = (String) fieldValue;
-            }
-            // add bookmark tag after collected, add it to every doc that has indexed text, since bookmark tag is not specified per text
-            d.add(new StringField(LuceneConstants.BOOKMARK_TAG, bookmarkTag, Field.Store.YES));
-
             // create fields based on type and add to document
-            Class<?> fieldType = fieldValue.getClass();
-            if (fieldType.equals(String.class)) {
+            Class<?> fieldType = fieldValue != null ? fieldValue.getClass() : null;
+            if (fieldType == String.class) {
                 if (fieldName.equals(LuceneConstants.CONTENTS)) {
                     d.add(new TextField(fieldName, (String) fieldValue, Field.Store.YES));
                 } else {
                     d.add(new StringField(fieldName, (String) fieldValue, Field.Store.YES));
                 }
             }
-            else if (fieldType.equals(Long.class)) {
+            else if (fieldType == Long.class) {
                 // Index numeric value and also store it for retrieval
                 d.add(new LongPoint(fieldName, (Long) fieldValue));
                 d.add(new StoredField(fieldName, (Long) fieldValue));
             }
-            else if (fieldType.equals(Double.class)) {
+            else if (fieldType == Double.class) {
                 d.add(new DoublePoint(fieldName, (Double) fieldValue));
                 d.add(new StoredField(fieldName, (Double) fieldValue));
             }
-            else if (fieldType.equals(Boolean.class)) {
+            else if (fieldType == Boolean.class) {
                 d.add(new StringField(fieldName, fieldValue.toString(), Field.Store.YES));
             }
 
             // recursive call into nested objects/arrays
-            parseJsonElement(fieldValue, file);
+            if (fieldValue instanceof JSONObject || fieldValue instanceof JSONArray) {
+                parseJsonElement(fieldValue, file, ctx);
+            }
         }
-
 
         writer.addDocument(d);
     }
@@ -132,5 +132,24 @@ public class Indexer {
         document.add(new StringField(LuceneConstants.FILE_NAME, file.getName(), Field.Store.YES));
         document.add(new StringField(LuceneConstants.FILE_PATH, file.getCanonicalPath(), Field.Store.YES));
         return document;
+    }
+
+    // Helper: find first occurrence of bookmark_tag from the parsed root
+    private String findBookmarkTagFirst(Object node) {
+        if (node instanceof JSONObject jsonObject) {
+            Object val = jsonObject.get(LuceneConstants.BOOKMARK_TAG);
+            if (val instanceof String s) return s;
+            for (Object k : jsonObject.keySet()) {
+                Object child = jsonObject.get((String) k);
+                String found = findBookmarkTagFirst(child);
+                if (found != null && !found.isEmpty()) return found;
+            }
+        } else if (node instanceof JSONArray arr) {
+            for (Object child : arr) {
+                String found = findBookmarkTagFirst(child);
+                if (found != null && !found.isEmpty()) return found;
+            }
+        }
+        return ""; // fallback when not present
     }
 }
