@@ -4,6 +4,7 @@ import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.sandbox.search.PhraseWildcardQuery;
@@ -74,13 +75,14 @@ public class Searcher implements Closeable {
         for (ScoreDoc scoreDoc : hits.scoreDocs) {
             Document document = this.getDocument(scoreDoc);
             String proc_id = document.get(LuceneConstants.BOOKMARK_TAG);
-            String start_speech = document.get(LuceneConstants.START);
-            String end_speech = document.get(LuceneConstants.END);
+            IndexableField startField = document.getField(LuceneConstants.START);
+            IndexableField endField = document.getField(LuceneConstants.END);
+            Number startNum = startField != null ? startField.numericValue() : null;
+            Number endNum = endField != null ? endField.numericValue() : null;
             if (proc_id != null) {
                 bookmarkCounts.put(proc_id, bookmarkCounts.getOrDefault(proc_id, (double) 0) + (double) scoreDoc.score);
             }
-            System.out.print(" From time "+ start_speech + " to " + end_speech +": ");
-            System.out.print(" From time " + start_speech + " to " + end_speech + ": ");
+            System.out.print(" From time " + (startNum != null ? startNum : "?") + " to " + (endNum != null ? endNum : "?") + ": ");
 //            displayTokenUsingStandardAnalyzer(document.get(LuceneConstants.CONTENTS));
             System.out.println(document.get(LuceneConstants.CONTENTS));
         }
