@@ -12,8 +12,8 @@ public class LuceneConstants {
     public static final int PHRASE_QUERY_SLOP = 2;
 
     // Boost weights for different query types (tune as needed)
-    public static final float BOOST_EXACT = 10.0f;
-    public static final float BOOST_PHONETIC = 2.0f;
-    public static final float BOOST_WILDCARD = 1.25f;
-    public static final float BOOST_FUZZY = 0.75f;
+    public static final float BOOST_EXACT = 2.0f;
+    public static final float BOOST_PHONETIC = 1.0f;
+    public static final float BOOST_WILDCARD = 5f;
+    public static final float BOOST_FUZZY = 5f;
 }

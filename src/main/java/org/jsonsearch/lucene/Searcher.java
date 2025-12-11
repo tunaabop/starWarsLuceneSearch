@@ -36,6 +36,9 @@ public class Searcher implements Closeable {
     private int minShouldMatch = 1;
     private int fuzzyEdits = 2;
 
+    private boolean isFuzzy = false;
+    private boolean isWildcard = false;
+
     public Searcher(String indexDirectoryPath) throws IOException {
         this.reader = DirectoryReader.open(FSDirectory.open(Paths.get(indexDirectoryPath)));
         this.indexSearcher = new IndexSearcher(reader);
@@ -113,20 +116,30 @@ public class Searcher implements Closeable {
             phraseQuery = createPhoneticPhraseQuery(phrase);
         }
 
+        booleanQueryBuilder.add(phraseQuery, BooleanClause.Occur.SHOULD);
+
         // check for fuzzy
-        if(phrase.contains("~")){
-            Query fuzzyQuery = createFuzzyQuery(phrase);
-            booleanQueryBuilder.add(fuzzyQuery, BooleanClause.Occur.SHOULD);
+        if (phrase.contains("~")) {
+            isFuzzy = true;
+            if (!phrase.contains(" ")) { // single term
+                booleanQueryBuilder.add(createFuzzyQuery(phrase), BooleanClause.Occur.SHOULD);
+            } else {
+                // Option A: tokenize and add per-term fuzzy (be careful with performance)
+                for (String w : phrase.split("\\s+")) {
+                    if (w.endsWith("~")) {
+                        booleanQueryBuilder.add(createFuzzyQuery(w.substring(0, w.length()-1)), BooleanClause.Occur.SHOULD);
+                    }
+                }
+            }
         }
 
         // check for wildcards
         if(phrase.contains("*") || phrase.contains("?")) {
+            isWildcard = true;
             Query wildcardPhraseQuery = createPhraseWildcardQuery(phrase);
             booleanQueryBuilder.add(wildcardPhraseQuery, BooleanClause.Occur.SHOULD);
         }
 
-        // Add Queries to BooleanQuery using SHOULD = OR logic (phrase should match)
-        booleanQueryBuilder.add(phraseQuery, BooleanClause.Occur.SHOULD);
         // ensure at least one of the SHOULD clauses matches (configurable)
         booleanQueryBuilder.setMinimumNumberShouldMatch(this.minShouldMatch);
 
@@ -210,6 +223,14 @@ public class Searcher implements Closeable {
             System.out.print(character);
         }
         System.out.println();
+    }
+
+    public boolean isFuzzy(){
+        return isFuzzy;
+    }
+
+    public boolean isWildcard(){
+        return isWildcard;
     }
 
 
