@@ -80,7 +80,7 @@ public class Searcher implements Closeable {
     }
 
     /**
-     * Executes the provided query.
+     * Executes the provided query, search using an {@link IndexSearcher}
      *
      * @param query Lucene query to execute
      * @return top docs limited by {@code maxSearch}
@@ -91,6 +91,7 @@ public class Searcher implements Closeable {
 
     /**
      * Fetches the stored {@link Document} for the given hit.
+     * Accessing a Lucene document allows us to access fields, this is used to {@link Searcher#getBookmarks(TopDocs)}
      */
     public Document getDocument(ScoreDoc scoreDoc) throws IOException {
         return indexSearcher.storedFields().document(scoreDoc.doc);
@@ -132,10 +133,9 @@ public class Searcher implements Closeable {
      * @return a composed {@link BooleanQuery}
      */
     public BooleanQuery createBooleanQuery(String phrase, boolean isPhoneticSearch) throws IOException {
+
+        // Builder to build boolean query, we can add various query clauses to this builder
         BooleanQuery.Builder booleanQueryBuilder = new BooleanQuery.Builder();
-
-
-
 
         // Tokenize using StandardAnalyzer for helper clauses (concatenated/hyphenated variants, prefix extras)
         List<String> tokens = analyzeWithStandard(LuceneConstants.CONTENTS, phrase);
@@ -194,17 +194,23 @@ public class Searcher implements Closeable {
 
         // Creating simple phrase query, either exact or based on phonetics
         Query phraseQuery;
-        if (!isPhoneticSearch) { // creating exact phrase query
+
+        // Creating exact phrase query
+        if (!isPhoneticSearch) {
             phraseQuery = createExactPhraseQuery(phrase);
             booleanQueryBuilder.add(phraseQuery, BooleanClause.Occur.SHOULD);
-        } else if(!isFuzzy || !isWildcard) { // if searching for fuzzy/wildcards, don't search phonetics
-            phraseQuery = createPhoneticPhraseQuery(phrase); // creating phonetic phrase query
+
+        // Creating phonetic phrase query. If searching for fuzzy/wildcards, don't search phonetics
+        } else if(!isFuzzy || !isWildcard) {
+            phraseQuery = createPhoneticPhraseQuery(phrase);
             booleanQueryBuilder.add(phraseQuery, BooleanClause.Occur.SHOULD);
         }
 
-        // ensure at least one (minShouldWatch = 1) of the SHOULD clauses matches (configurable)
-        booleanQueryBuilder.setMinimumNumberShouldMatch(this.minShouldMatch); // can alter minShouldMatch to alter search precision
+        // Ensure at least one (minShouldWatch = 1) of the SHOULD clauses matches
+        // (configurable, can alter minShouldMatch to alter search precision)
+        booleanQueryBuilder.setMinimumNumberShouldMatch(this.minShouldMatch);
 
+        // Returns a BooleanQuery
         return booleanQueryBuilder.build();
     }
 
@@ -252,10 +258,14 @@ public class Searcher implements Closeable {
      * terms to {@link PrefixQuery} when possible, and using {@link WildcardQuery} otherwise.
      */
     public Query createPhraseWildcardQuery(String phrase) throws IOException {
+
         PhraseWildcardQuery.Builder builder = new PhraseWildcardQuery.Builder(LuceneConstants.CONTENTS, this.phraseSlop);
+
         String[] words = phrase.split("\\s+"); // split words by one/more whitespace
+
         for(String word : words) {
-            if (word.contains("*") || word.contains("?")) { // If the term contains a wildcard, create a MultiTermQuery
+            // If the term contains a wildcard, create a MultiTermQuery
+            if (word.contains("*") || word.contains("?")) {
                 MultiTermQuery multiTermQuery;
                 // Prefer PrefixQuery when the only wildcard is a trailing '*'
                 if (word.endsWith("*") && word.indexOf('*') == word.length()-1 && !word.contains("?")) {
@@ -265,10 +275,12 @@ public class Searcher implements Closeable {
                     // Fallback to generic wildcard when internal wildcards are used
                     multiTermQuery = createWildcardQuery(word);
                 }
+                // Account for each term into a MultitermQuery
                 builder.addMultiTerm(multiTermQuery);
             }
             else {
-                // For a regular term, add it directly
+                // For a regular term in this wildcard phrase, add it directly
+                // e.g. Phrase "hyper* space", add "space" normally
                 builder.addTerm(new Term(LuceneConstants.CONTENTS, word));
             }
         }
