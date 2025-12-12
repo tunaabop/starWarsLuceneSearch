@@ -161,8 +161,8 @@ public class StarWarsTester {
             tester.totalHits += phoneticOutcome.totalHits;
             printSeparator('=', 75);
 
-            // When search phrase is not found, or when < min occur, suggest alternatives
-            if ((suggestions != null && !suggestions.isEmpty()) && tester.totalHits < tester.minOccur) {
+            // Give suggestions when search phrase is not found, or when < min occur, suggest alternatives
+            if ((suggestions != null && !suggestions.isEmpty()) && tester.totalHits < LuceneConstants.MIN_OCCUR) {
                 System.out.println("Here are some suggestion searches:");
                 for (String current_suggestion : suggestions) {
                     System.out.print("Suggestion results for \"" + current_suggestion + "\": ");
