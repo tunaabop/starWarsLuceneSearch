@@ -1,5 +1,6 @@
 package org.jsonsearch.lucene;
 
+import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
@@ -11,47 +12,131 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.json.simple.parser.ParseException;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.stream.Collectors;
 
 import static org.jsonsearch.lucene.Searcher.printSeparator;
 
-// Here we perform example tests on StarWards JSON files for indexing, querying, and searching
+/**
+ * Perform demo phrase search on StarWars JSON files found in {@link StarWarsTester#dataDir}
+ * Create exact index in {@link StarWarsTester#indexExactWordDir} and phonetic index in {@link StarWarsTester#indexPhoneticDir}
+ * Perform {@link StarWarsTester#exactWordSearch(String)} and {@link StarWarsTester#phoneticSearch(String)} using
+ * {@link Searcher#createBooleanQuery(String, boolean)}
+ */
 public class StarWarsTester {
-    static TopDocs phoneticHits;
-    static TopDocs exactWordHits;
-    String indexPhoneticDir = "src/test/indexPhonetic"; //default
-    String indexExactWordDir = "src/test/indexExactWord"; //default
-    String dataDir = "src/main/resources"; //default TODO: test with difference dir
-    Indexer indexer;
+    String indexPhoneticDir = "target/index/indexPhonetic"; // default moved under target/
+    String indexExactWordDir = "target/index/indexExactWord"; // default moved under target/
+    String dataDir = "src/main/resources"; //default JSON files location
+    Indexer indexer; // mainly used for dictionary index
 
+    // Runtime-tunable boosts with defaults from constants (influence search results ranking)
+    private float boostExact = LuceneConstants.BOOST_EXACT;
+    private float boostPhonetic = LuceneConstants.BOOST_PHONETIC;
+    private float boostWildcard = LuceneConstants.BOOST_WILDCARD;
+    private float boostFuzzy = LuceneConstants.BOOST_FUZZY;
+
+    // Query params
+    private int totalHits = 0; // records total # search results
+    private int maxSearch = LuceneConstants.MAX_SEARCH; // max # results to retrieve
+    private int phraseSlop = LuceneConstants.PHRASE_QUERY_SLOP;
+    private int minShouldMatch = 1; // min # SHOULD clauses to match in boolean query
+    private int fuzzyEdits = 2; //Levenshtein distance for fuzzy queries
+    private int minOccur = LuceneConstants.MIN_OCCUR; // min total hits threshold used by CLI to decide whether results significant
+
+    // Spellchecker runtime controls
+    private boolean rebuildSpellIndex = false; // force rebuild dictionary index on startup
+    private int spellSuggestionsPerTerm = 2;   // per-term Spellchecker suggestion count
+    private int maxSuggestionCombos = 5;       // cap on combined phrase suggestions
+
+    /**
+     * CLI: At startup, check and parse CLI flags
+     * User is prompted 1. whether to build indexes (y/n) and 2. search phrase ("phrase")
+     * Results displayed 1. exact and phonetic results and 2. suggestion search results if entered phrase !found
+     * Behind the scene:
+     * 1. Build indexes with user entered dir paths
+     * 2. Generate spell suggestions over exact index's directory
+     * 3. Results are merged and ranked into final bookmark tags with scores
+     * 4. Scores are boosted when searcher is called into building queries
+     * */
     public static void main(String[] args) throws IOException, ParseException {
         StarWarsTester tester = new StarWarsTester();
 
-        // Scanner for user input
+        // Parse CLI flags for boosts and query params
+        for (String arg : args) {
+            if (arg.startsWith("--boostExact=")) {
+                parseBoost(arg.substring("--boostExact=".length()), "BOOST_EXACT", v -> tester.boostExact = v);
+            } else if (arg.startsWith("--boostPhonetic=")) {
+                parseBoost(arg.substring("--boostPhonetic=".length()), "BOOST_PHONETIC", v -> tester.boostPhonetic = v);
+            } else if (arg.startsWith("--boostWildcard=")) {
+                parseBoost(arg.substring("--boostWildcard=".length()), "BOOST_WILDCARD", v -> tester.boostWildcard = v);
+            } else if (arg.startsWith("--boostFuzzy=")) {
+                parseBoost(arg.substring("--boostFuzzy=".length()), "BOOST_FUZZY", v -> tester.boostFuzzy = v);
+            } else if (arg.startsWith("--maxSearch=")) {
+                parseInt(arg.substring("--maxSearch=".length()), "MAX_SEARCH", v -> tester.maxSearch = v, 1, 100000);
+            } else if (arg.startsWith("--slop=")) {
+                parseInt(arg.substring("--slop=".length()), "PHRASE_QUERY_SLOP", v -> tester.phraseSlop = v, 0, 100);
+            } else if (arg.startsWith("--minShouldMatch=")) {
+                parseInt(arg.substring("--minShouldMatch=".length()), "MIN_SHOULD_MATCH", v -> tester.minShouldMatch = v, 0, 10);
+            } else if (arg.startsWith("--fuzzyEdits=")) {
+                parseInt(arg.substring("--fuzzyEdits=".length()), "FUZZY_EDITS", v -> tester.fuzzyEdits = v, 0, 2);
+            } else if (arg.startsWith("--minOccur=")) {
+                parseInt(arg.substring("--minOccur=".length()), "MIN_OCCUR", v -> tester.minOccur = v, 0, 100000);
+            } else if (arg.equals("--rebuildSpellIndex")) {
+                tester.rebuildSpellIndex = true;
+            } else if (arg.startsWith("--spellSuggestionsPerTerm=")) {
+                parseInt(arg.substring("--spellSuggestionsPerTerm=".length()), "SPELL_SUGGESTIONS_PER_TERM", v -> tester.spellSuggestionsPerTerm = v, 1, 10);
+            } else if (arg.startsWith("--maxSuggestionCombos=")) {
+                parseInt(arg.substring("--maxSuggestionCombos=".length()), "MAX_SUGGESTION_COMBOS", v -> tester.maxSuggestionCombos = v, 1, 100);
+            }
+        }
+        System.out.println(String.format(
+                "Active boosts -> exact: %.3f, phonetic: %.3f, wildcard: %.3f, fuzzy: %.3f\n" +
+                "Query params -> maxSearch: %d, slop: %d, minShouldMatch: %d, fuzzyEdits: %d, minOccur: %d\n" +
+                "Spellchecker -> rebuild: %s, perTerm: %d, maxCombos: %d",
+                tester.boostExact, tester.boostPhonetic, tester.boostWildcard, tester.boostFuzzy,
+                tester.maxSearch, tester.phraseSlop, tester.minShouldMatch, tester.fuzzyEdits, tester.minOccur,
+                Boolean.toString(tester.rebuildSpellIndex), tester.spellSuggestionsPerTerm, tester.maxSuggestionCombos));
+
+
+        // CLI: Scanner for user input
         Scanner sc = new Scanner(System.in);
 
-        // Indexing
+        // Indexing - optional based on whether it has been done already
         System.out.println("Would you like to index search files? (y/n)");
         if (sc.nextLine().trim().equalsIgnoreCase("y")) {
-            // ask user to define which files to look for
-            System.out.println("Please enter filepath for search files (default= \"src/main/resources\")");
+
+            // Ask user to define which files to look for
+            System.out.println("Please enter filepath for search files ('Enter' default= \"src/main/resources\")");
             String dataPath = sc.nextLine().trim();
-            if (!dataPath.isEmpty()) tester.setDataDir(dataPath);
+            if (!dataPath.isEmpty()){
+                tester.setDataDir(dataPath);
+            }
+            else{
+                tester.setDataDir(tester.dataDir);
+            }
 
-            // ask user to define where to store exact content index for search purposes
-            System.out.println("Please enter filepath to store exact match index: (default= \"src/test/indexExactWord\")");
+            // Ask user to define where to store exact content index for query purposes
+            System.out.println("Please enter filepath to store exact match index: ('Enter' default= \"target/index/indexExactWord\")");
             String indexExactPath = sc.nextLine().trim();
-            if (!indexExactPath.isEmpty()) tester.setExactWordIndexDir(indexExactPath);
-            // ask user to define where to store phonetic index for search purposes
-            System.out.println("Please enter filepath to store phonetic index: (default= \"src/test/indexPhonetic\")");
-            String indexPhoneticPath = sc.nextLine().trim();
-            if (!indexPhoneticPath.isEmpty()) tester.setPhoneticIndexDir(indexPhoneticPath);
+            if (!indexExactPath.isEmpty()){
+                tester.setExactWordIndexDir(indexExactPath);
+            }
+            else{
+                tester.setExactWordIndexDir(tester.indexExactWordDir);
+            }
 
-            // create index here
+            // Ask user to define where to store phonetic index for query purposes
+            System.out.println("Please enter filepath to store phonetic index: ('Enter' default= \"target/index/indexPhonetic\")");
+            String indexPhoneticPath = sc.nextLine().trim();
+            if (!indexPhoneticPath.isEmpty()){
+                tester.setPhoneticIndexDir(indexPhoneticPath);
+            }
+            else{
+                tester.setPhoneticIndexDir(tester.indexPhoneticDir);
+            }
+
+            // Create indexes here
             tester.createPhoneticIndex();
             tester.createExactWordIndex();
         }
@@ -62,50 +147,49 @@ public class StarWarsTester {
         String phrase = sc.nextLine(); // search phrase
 
         // Spellchecker: create and use in try-with-resources to avoid leaks
-        String[] suggestions;
-        try (Directory spellIndexDir = FSDirectory.open(Paths.get("src/test/dictionaryIndex"));
-             SpellChecker spellChecker = new SpellChecker(spellIndexDir);
+        try (Directory spellIndexDir = FSDirectory.open(Paths.get("target/index/dictionaryIndex"));
+
+             // Access exact phrase index and produce a dictionary index based on our files indexed
              Directory mainIndexDir = FSDirectory.open(Paths.get(tester.getExactIndexDir()));
              IndexReader indexReader = DirectoryReader.open(mainIndexDir);
              StandardAnalyzer standardAnalyzer = new StandardAnalyzer()) {
-            spellChecker.indexDictionary(new LuceneDictionary(indexReader, LuceneConstants.CONTENTS), new IndexWriterConfig(standardAnalyzer), true);
-            int numSuggestions = 5;
-            suggestions = spellChecker.suggestSimilar(phrase, numSuggestions);
+
+            SpellChecker spellChecker = new SpellChecker(spellIndexDir);
+            // Reuse the spell index across runs; rebuild only if requested or missing
+            ensureSpellIndex(spellChecker, spellIndexDir, indexReader, standardAnalyzer, tester.rebuildSpellIndex);
+            // Build per-term suggestions and combine into phrases
+            List<String> suggestions = tester.buildPerTermSuggestions(phrase, spellChecker, standardAnalyzer, tester.spellSuggestionsPerTerm, tester.maxSuggestionCombos);
             
             // Results for exact search phrase
-            LinkedHashMap<String, Double> exactResults = tester.exactWordSearch(phrase);
-            if (exactResults != null) {
-                tester.merge(finalResults, exactResults);
-                System.out.print(exactWordHits.totalHits.value() + " exact matches found ");
-                System.out.println("with bookmark tags: " + exactResults);
-            } else {
-                System.out.println("No exact matches found");
-            }
+            SearchOutcome exactOutcome = tester.exactWordSearch(phrase);
+            tester.merge(finalResults, exactOutcome.bookmarksByTag);
+            System.out.print(exactOutcome.totalHits + " exact matches found ");
+            System.out.println("with bookmark tags: " + exactOutcome.bookmarksByTag);
+
+            // Keep track of how many total hits
+            tester.totalHits += exactOutcome.totalHits;
+
             printSeparator('=', 75);
 
             // Results for phonetically similar phrase
             System.out.println("Searching for similar phonetics...");
-            LinkedHashMap<String, Double> phoneticResults = tester.phoneticSearch(phrase);
-            if (phoneticResults != null) {
-                tester.merge(finalResults, phoneticResults);
-                System.out.print(phoneticHits.totalHits.value() + " similarities found ");
-                System.out.println("with bookmark tags: " + phoneticResults);
-            }
+            SearchOutcome phoneticOutcome = tester.phoneticSearch(phrase);
+            tester.merge(finalResults, phoneticOutcome.bookmarksByTag);
+            System.out.print(phoneticOutcome.totalHits + " similarities found ");
+            System.out.println("with bookmark tags: " + phoneticOutcome.bookmarksByTag);
+            tester.totalHits += phoneticOutcome.totalHits;
             printSeparator('=', 75);
 
-            // When search phrase is not found, suggest alternatives
-            if (suggestions != null && suggestions.length > 0 && !spellChecker.exist(phrase)) { // only give suggestion when search word DNE
+            // Give suggestions when search phrase is not found, or when < min occur, suggest alternatives
+            if ((suggestions != null && !suggestions.isEmpty()) && tester.totalHits < LuceneConstants.MIN_OCCUR) {
                 System.out.println("Here are some suggestion searches:");
                 for (String current_suggestion : suggestions) {
                     System.out.print("Suggestion results for \"" + current_suggestion + "\": ");
-                    LinkedHashMap<String, Double> similar_results = tester.exactWordSearch(current_suggestion);
-                    if (similar_results != null) {
-                        tester.merge(finalResults, similar_results);
-                        System.out.print(exactWordHits.totalHits.value() + " matches found ");
-                        System.out.println("with bookmark tags: " + similar_results);
-                    } else {
-                        System.out.println("n/a with MIN_OCCUR > " + LuceneConstants.MIN_OCCUR);
-                    }
+                    SearchOutcome suggestionOutcome = tester.exactWordSearch(current_suggestion);
+                    tester.merge(finalResults, suggestionOutcome.bookmarksByTag);
+                    System.out.print(suggestionOutcome.totalHits + " matches found ");
+                    System.out.println("with bookmark tags: " + suggestionOutcome.bookmarksByTag);
+                    tester.totalHits += suggestionOutcome.totalHits;
                     printSeparator('-', 75);
                 }
             }
@@ -113,33 +197,39 @@ public class StarWarsTester {
 
 
         // Process results
+        if(tester.totalHits > tester.minOccur) {
+            System.out.println("Top results for phrase: \"" + phrase + "\"");
 
-        System.out.println("Top results for phrase: \"" + phrase + "\"");
-
-        // print final
-        finalResults = (LinkedHashMap<String, Double>) tester.sortByValue(finalResults); // sort bookmarks by score
-        System.out.println("FINAL BOOKMARK TAGS w/ SCORES: " + finalResults);
-
+            // print final, SORTED results
+            finalResults = (LinkedHashMap<String, Double>) tester.sortByValue(finalResults); // sort bookmarks by score
+            System.out.println("FINAL BOOKMARK TAGS w/ SCORES: " + finalResults);
+        }
+        else{
+            System.out.println("No significant results with MIN_OCCUR > " + tester.minOccur);
+        }
     }
 
+    /** Changes where the JSON files we need to index are located */
     public void setDataDir(String path) {
         dataDir = path;
     }
 
-    public void setPhoneticIndexDir(String path) {
-        indexPhoneticDir = path;
-    }
-
-    public void setExactWordIndexDir(String path) {
-        indexExactWordDir = path;
-    }
-
-    // use to access index created
+    /** Access index dir path created and return path */
     public String getExactIndexDir() {
         return indexExactWordDir;
     }
 
-    // Calls Indexer to process JSON files content from indexDir into lucene index with phonetic filter in dataDir
+    /** Changes the exact phrase index directory path, based on user input */
+    public void setExactWordIndexDir(String path) {
+        indexExactWordDir = path;
+    }
+
+    /** Changes the phonetic phrase index directory path, based on user input */
+    public void setPhoneticIndexDir(String path) {
+        indexPhoneticDir = path;
+    }
+
+    /** Calls Indexer to process JSON files content from indexDir into lucene index with phonetic filter in dataDir */
     public void createExactWordIndex() throws IOException, ParseException {
         try (StandardAnalyzer standardAnalyzer = new StandardAnalyzer()) {
             indexer = new Indexer(indexExactWordDir, standardAnalyzer);
@@ -157,7 +247,7 @@ public class StarWarsTester {
         }
     }
 
-    // Calls Indexer to process JSON files content from indexDir into lucene index with phonetic filter in dataDir
+    /** Calls Indexer to process JSON files content from indexDir into lucene index with phonetic filter in dataDir */
     public void createPhoneticIndex() throws IOException, ParseException {
         try (MyPhoneticAnalyzer phoneticAnalyzer = new MyPhoneticAnalyzer()) {
             indexer = new Indexer(indexPhoneticDir, phoneticAnalyzer);
@@ -176,39 +266,41 @@ public class StarWarsTester {
     }
 
 
-    // Creates query based on exact phrase; returns found bookmark tags and total scores per tag
-    public LinkedHashMap<String, Double> exactWordSearch(String phrase) throws IOException {
+    /** Creates query based on exact phrase; returns found bookmark tags and total scores per tag */
+    public SearchOutcome exactWordSearch(String phrase) throws IOException {
         long startTime = System.currentTimeMillis();
         LinkedHashMap<String, Double> result;
+        int total;
         try (Searcher searcherExact = new Searcher(indexExactWordDir)) {
+            searcherExact.setBoosts(boostExact, boostPhonetic, boostWildcard, boostFuzzy);
+            searcherExact.setQueryParams(maxSearch, phraseSlop, minShouldMatch, fuzzyEdits);
             Query query = searcherExact.createBooleanQuery(phrase, false); // here we can choose what type of Query to create
-            exactWordHits = searcherExact.search(query);
-            if (exactWordHits.totalHits.value() < LuceneConstants.MIN_OCCUR) {
-                return null;
-            }
-            result = searcherExact.getBookmarks(exactWordHits);
+            TopDocs hits = searcherExact.search(query);
+            total = (int) hits.totalHits.value();
+            result = searcherExact.getBookmarks(hits);
         }
         long endTime = System.currentTimeMillis();
 
         System.out.println("Searching took " + (endTime - startTime) + " ms");
-        return result;
+        return new SearchOutcome(result, total);
     }
 
-    // Creates query based on phonetics of a phrase; returns found bookmark tags IDs and total scores per tag
-    public LinkedHashMap<String, Double> phoneticSearch(String phrase) throws IOException {
+    /** Creates a query based on phonetics of a phrase; returns a map of found bookmark tags and total scores per tag */
+    public SearchOutcome phoneticSearch(String phrase) throws IOException {
         long startTime = System.currentTimeMillis();
         LinkedHashMap<String, Double> result;
+        int total;
         try (Searcher searcher = new Searcher(indexPhoneticDir)) {
+            searcher.setBoosts(boostExact, boostPhonetic, boostWildcard, boostFuzzy);
+            searcher.setQueryParams(maxSearch, phraseSlop, minShouldMatch, fuzzyEdits);
             Query query = searcher.createBooleanQuery(phrase, true); // here we can choose what type of Query to create
-            phoneticHits = searcher.search(query);
-            if (phoneticHits.totalHits.value() < LuceneConstants.MIN_OCCUR) {
-                return null;
-            }
-            result = searcher.getBookmarks(phoneticHits);
+            TopDocs hits = searcher.search(query);
+            total = (int) hits.totalHits.value();
+            result = searcher.getBookmarks(hits);
         }
         long endTime = System.currentTimeMillis();
         System.out.println("Searching took " + (endTime - startTime) + " ms");
-        return result;
+        return new SearchOutcome(result, total);
     }
 
 // Methods for map organization
@@ -238,5 +330,151 @@ public class StarWarsTester {
         }
         return sortedMap;
 
+    }
+
+    // Utility to parse boost values safely
+    private static void parseBoost(String value, String name, java.util.function.Consumer<Float> setter) {
+        try {
+            float f = Float.parseFloat(value);
+            setter.accept(f);
+        } catch (NumberFormatException e) {
+            System.out.println("[WARN] Invalid value for " + name + ": '" + value + "'. Using default.");
+        }
+    }
+
+    // Utility to parse integer flags safely with bounds
+    private static void parseInt(String value, String name, java.util.function.Consumer<Integer> setter, int min, int max) {
+        try {
+            int i = Integer.parseInt(value);
+            if (i < min || i > max) throw new NumberFormatException();
+            setter.accept(i);
+        } catch (NumberFormatException e) {
+            System.out.println("[WARN] Invalid value for " + name + ": '" + value + "'. Using default.");
+        }
+    }
+
+    // Build or reuse spell index: rebuild if flag is true or index does not exist/has no docs
+    private static void ensureSpellIndex(SpellChecker spellChecker,
+                                         Directory spellIndexDir,
+                                         IndexReader mainIndexReader,
+                                         StandardAnalyzer analyzer,
+                                         boolean rebuild) throws IOException {
+        boolean hasSpellIndex = DirectoryReader.indexExists(spellIndexDir);
+        boolean shouldBuild = rebuild || !hasSpellIndex;
+        if (!shouldBuild && hasSpellIndex) {
+            try (DirectoryReader r = DirectoryReader.open(spellIndexDir)) {
+                shouldBuild = r.numDocs() == 0;
+            }
+        }
+        if (shouldBuild) {
+            spellChecker.indexDictionary(new LuceneDictionary(mainIndexReader, LuceneConstants.CONTENTS), new IndexWriterConfig(analyzer), true);
+        }
+    }
+
+    // Tokenize a phrase into terms using the provided analyzer
+    private static List<String> tokenize(String text, StandardAnalyzer analyzer) throws IOException {
+        List<String> tokens = new ArrayList<>();
+        try (TokenStream ts = analyzer.tokenStream(LuceneConstants.CONTENTS, text)) {
+            org.apache.lucene.analysis.tokenattributes.CharTermAttribute term = ts.addAttribute(org.apache.lucene.analysis.tokenattributes.CharTermAttribute.class);
+            ts.reset();
+            while (ts.incrementToken()) {
+                tokens.add(term.toString());
+            }
+        }
+        return tokens;
+    }
+
+    // Build per-term suggestions and combine to phrases with a cap on combinations
+    private List<String> buildPerTermSuggestions(String phrase,
+                                                 SpellChecker spellChecker,
+                                                 StandardAnalyzer analyzer,
+                                                 int perTerm,
+                                                 int maxCombos) throws IOException {
+        List<String> terms = tokenize(phrase, analyzer);
+        if (terms.isEmpty()) return Collections.emptyList();
+
+        List<List<String>> perTermOptions = new ArrayList<>();
+        for (String term : terms) {
+            List<String> options = new ArrayList<>();
+            if (spellChecker.exist(term)) {
+                options.add(term);
+            } else {
+                String[] sugg = spellChecker.suggestSimilar(term, perTerm);
+                if (sugg != null && sugg.length > 0) {
+                    for (String s : sugg) options.add(s);
+                } else {
+                    options.add(term); // fallback to original token
+                }
+            }
+            perTermOptions.add(options);
+        }
+
+        // Combine options with a cap
+        List<String> combined = new ArrayList<>();
+        combined.add("");
+        for (List<String> opts : perTermOptions) {
+            List<String> next = new ArrayList<>();
+            for (String prefix : combined) {
+                for (String opt : opts) {
+                    if (next.size() >= maxCombos) break;
+                    String sep = prefix.isEmpty() ? "" : " ";
+                    next.add(prefix + sep + opt);
+                }
+                if (next.size() >= maxCombos) break;
+            }
+            combined = next;
+            if (combined.isEmpty()) break;
+        }
+
+        // Heuristic: also consider concatenated and hyphenated forms like "hyperspace" and "hyper-space"
+        // These are common corrections when the original input had a space.
+        String joined = String.join("", terms);
+        String hyphenated = String.join("-", terms);
+        // Add direct exists or top suggestions for these forms
+        if (!joined.equalsIgnoreCase(phrase)) {
+            if (spellChecker.exist(joined)) {
+                combined.add(joined);
+            } else {
+                String[] sugg = spellChecker.suggestSimilar(joined, perTerm);
+                if (sugg != null) {
+                    for (String s : sugg) {
+                        combined.add(s);
+                    }
+                }
+            }
+        }
+        if (!hyphenated.equalsIgnoreCase(phrase)) {
+            if (spellChecker.exist(hyphenated)) {
+                combined.add(hyphenated);
+            } else {
+                String[] sugg = spellChecker.suggestSimilar(hyphenated, perTerm);
+                if (sugg != null) {
+                    for (String s : sugg) {
+                        combined.add(s);
+                    }
+                }
+            }
+        }
+
+        // Deduplicate and remove the original phrase if present, but keep order
+        LinkedHashSet<String> uniq = new LinkedHashSet<>(combined);
+        uniq.remove(phrase);
+        // Respect maxCombos cap on the final list as well
+        List<String> out = new ArrayList<>(uniq);
+        if (out.size() > maxCombos) {
+            return out.subList(0, maxCombos);
+        }
+        return out;
+    }
+
+    // Simple value object to return search results
+    private static class SearchOutcome {
+        final LinkedHashMap<String, Double> bookmarksByTag;
+        final int totalHits;
+
+        SearchOutcome(LinkedHashMap<String, Double> bookmarksByTag, int totalHits) {
+            this.bookmarksByTag = bookmarksByTag != null ? bookmarksByTag : new LinkedHashMap<>();
+            this.totalHits = totalHits;
+        }
     }
 }
