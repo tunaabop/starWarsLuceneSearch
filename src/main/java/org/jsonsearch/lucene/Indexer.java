@@ -1,3 +1,4 @@
+
 package org.jsonsearch.lucene;
 
 import org.apache.lucene.analysis.Analyzer;
@@ -17,27 +18,48 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.nio.file.Paths;
 
-// This class performs lucene indexing for a JSON file
+/**
+ * Creates a Lucene index from JSON files.
+ * <p>
+ * Each JSON object encountered in the input files is converted into a Lucene {@link Document}
+ * with fields inferred from value types. Universal metadata (file name, path, bookmark tag) is
+ * added to every document.
+ */
 public class Indexer {
     private final IndexWriter writer;
-    // Per-file parsing context holder to avoid mutable instance state
+
+    /** Per-file parsing context holder to avoid mutable instance state. */
     private static final class ParseContext {
         final String bookmarkTag;
         ParseContext(String bookmarkTag) { this.bookmarkTag = bookmarkTag != null ? bookmarkTag : ""; }
     }
 
-    // Initialize writer
+    /**
+     * Opens/creates an index at the given directory using the provided analyzer.
+     *
+     * @param indexDirectoryPath path to the index directory
+     * @param analyzer analyzer used to process text
+     * @throws IOException if the index cannot be created or opened
+     */
     public Indexer(String indexDirectoryPath, Analyzer analyzer) throws IOException {
         Directory indexDirectory = FSDirectory.open(Paths.get(indexDirectoryPath));
-
-//        StandardAnalyzer standardAnalyzer = new StandardAnalyzer();
         IndexWriterConfig config = new IndexWriterConfig(analyzer);
         writer = new IndexWriter(indexDirectory, config);
     }
+    /** Closes the underlying {@link IndexWriter}. */
     public void close() throws IOException {
         writer.close();
     }
 
+    /**
+     * Indexes all JSON files in a directory accepted by the given filter.
+     *
+     * @param dataDirPath directory containing JSON files
+     * @param filter file filter (e.g., {@link JsonFileFilter})
+     * @return number of documents in the index after completion
+     * @throws IOException if reading or indexing fails
+     * @throws ParseException if JSON parsing fails
+     */
     public int createIndex(String dataDirPath, FileFilter filter) throws IOException, ParseException {
         File[] files = new File(dataDirPath).listFiles();
         if (files != null) {
@@ -47,21 +69,21 @@ public class Indexer {
                         && file.exists()
                         && file.canRead()
                         && filter.accept(file)) {
-                    indexFile(file); // index per file
+                    indexFile(file);
                 }
             }
         }
-        return writer.getDocStats().numDocs; // how many lucene docs created
+        return writer.getDocStats().numDocs;
 
     }
 
-    // To index a single json file, call parsing on it
+    /** Indexes a single JSON file by parsing and adding its contents. */
     private void indexFile(File file) throws IOException, ParseException {
         System.out.println("Indexing file: " + file.getCanonicalPath());
         parseJSONFile(file);
     }
 
-    // To parse JSON file into a JSONArray object
+    /** Parses a JSON file into objects and dispatches for indexing. */
     private void parseJSONFile(File file) throws IOException, ParseException {
         JSONParser  parser = new JSONParser();
         Object root = parser.parse(new FileReader(file.getPath()));
@@ -71,18 +93,20 @@ public class Indexer {
         parseJsonElement(root, file, ctx);
     }
 
-    // Recursively parse json file
+    /** Recursively parses the JSON tree and indexes each object encountered. */
     private void parseJsonElement(Object element, File file, ParseContext ctx) throws IOException, ParseException {
         if (element instanceof JSONObject jsonObject) {
             parseJsonObject(jsonObject, file, ctx);
         } else if (element instanceof JSONArray jsonArray) {
             for (Object obj : jsonArray) {
-                parseJsonElement(obj, file, ctx); // recursive call
+                parseJsonElement(obj, file, ctx);
             }
         }
     }
 
-    // This method will parse a single json object -- process and add fields to a new lucene doc (indexing)
+    /**
+     * Converts a single JSON object into a Lucene document, adding fields based on value types.
+     */
     private void parseJsonObject(JSONObject jsonObject, File file, ParseContext ctx) throws IOException, ParseException {
         // Create a new document and add universal fields first
         Document d = createLuceneDocument(file);
@@ -94,7 +118,7 @@ public class Indexer {
             String fieldName = (String) key;
             Object fieldValue = jsonObject.get(fieldName);
 
-            // create fields based on type and add to document
+            // Create fields based on type and add to document
             Class<?> fieldType = fieldValue != null ? fieldValue.getClass() : null;
             if (fieldType == String.class) {
                 if (fieldName.equals(LuceneConstants.CONTENTS)) {
@@ -116,7 +140,7 @@ public class Indexer {
                 d.add(new StringField(fieldName, fieldValue.toString(), Field.Store.YES));
             }
 
-            // recursive call into nested objects/arrays
+            // Recurse into nested objects/arrays
             if (fieldValue instanceof JSONObject || fieldValue instanceof JSONArray) {
                 parseJsonElement(fieldValue, file, ctx);
             }
@@ -125,17 +149,23 @@ public class Indexer {
         writer.addDocument(d);
     }
 
-    // This private method creates a lucene doc and add universal fields (for our JSON files, file name, path, and bookmark tag)
+    /**
+     * Creates a Lucene document with universal fields (file name and path).
+     */
     private Document createLuceneDocument(File file) throws IOException {
-        // Deprecated: kept for compatibility if referenced elsewhere; prefer inline creation above.
+        // Note: kept minimal; additional metadata can be added by callers.
         Document document = new Document();
         document.add(new StringField(LuceneConstants.FILE_NAME, file.getName(), Field.Store.YES));
         document.add(new StringField(LuceneConstants.FILE_PATH, file.getCanonicalPath(), Field.Store.YES));
         return document;
     }
 
-    // Helper: find first occurrence of bookmark_tag from the parsed root
-    // ideally does not have to go thru the whole thing b/c bookmark tag should be near front
+    /**
+     * Finds the first occurrence of {@link LuceneConstants#BOOKMARK_TAG} within the parsed JSON tree.
+     *
+     * @param node root or sub-node to inspect
+     * @return the first non-empty bookmark tag, or an empty string if not present
+     */
     private String findBookmarkTagFirst(Object node) {
         if (node instanceof JSONObject jsonObject) {
             Object val = jsonObject.get(LuceneConstants.BOOKMARK_TAG);
@@ -151,6 +181,6 @@ public class Indexer {
                 if (found != null && !found.isEmpty()) return found;
             }
         }
-        return ""; // fallback when not present
+        return ""; // Fallback when not present
     }
 }

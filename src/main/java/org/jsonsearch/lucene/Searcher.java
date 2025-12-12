@@ -22,7 +22,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.List;
 
-// This is the main searcher class that look for results both exact and similar in phonetics
+/**
+ * Wrapper around Lucene's {@link IndexSearcher} providing convenience methods
+ * for building exact, phonetic, wildcard, and fuzzy queries, and for aggregating
+ * results by bookmark tag.
+ */
 public class Searcher implements Closeable {
     private final IndexSearcher indexSearcher;
     private final DirectoryReader reader;
@@ -48,7 +52,14 @@ public class Searcher implements Closeable {
         this.indexSearcher = new IndexSearcher(reader);
     }
 
-    // Allow callers to tune boosts at runtime
+    /**
+     * Sets per-query-type boost weights used when combining queries.
+     *
+     * @param exact     boost for exact phrase matches
+     * @param phonetic  boost for phonetic matches
+     * @param wildcard  boost for wildcard matches (including prefix)
+     * @param fuzzy     boost for fuzzy matches
+     */
     public void setBoosts(float exact, float phonetic, float wildcard, float fuzzy) {
         this.boostExact = exact;
         this.boostPhonetic = phonetic;
@@ -56,7 +67,14 @@ public class Searcher implements Closeable {
         this.boostFuzzy = fuzzy;
     }
 
-    // This allows callers to tune general query parameters at runtime
+    /**
+     * Sets general query parameters used by constructed queries.
+     *
+     * @param maxSearch       maximum number of hits to return
+     * @param phraseSlop      phrase slop for phrase queries
+     * @param minShouldMatch  minimum number of SHOULD clauses that must match
+     * @param fuzzyEdits      maximum allowed Levenshtein edits for fuzzy queries (0..2)
+     */
     public void setQueryParams(int maxSearch, int phraseSlop, int minShouldMatch, int fuzzyEdits) {
         if (maxSearch > 0) this.maxSearch = maxSearch;
         if (phraseSlop >= 0) this.phraseSlop = phraseSlop;
@@ -64,18 +82,31 @@ public class Searcher implements Closeable {
         if (fuzzyEdits >= 0 && fuzzyEdits <= 2) this.fuzzyEdits = fuzzyEdits;
     }
 
+    /**
+     * Executes the provided query.
+     *
+     * @param query Lucene query to execute
+     * @return top docs limited by {@code maxSearch}
+     */
     public TopDocs search(Query query) throws IOException {
         return indexSearcher.search(query, this.maxSearch);
     }
 
-    // in order to access fields, we need the lucene doc
+    /**
+     * Fetches the stored {@link Document} for the given hit.
+     */
     public Document getDocument(ScoreDoc scoreDoc) throws IOException {
         return indexSearcher.storedFields().document(scoreDoc.doc);
     }
 
-    // This method aggregates bookmark tag IDs with cumulative scores;
+    /**
+     * Aggregates bookmark tags from hits and sums their scores for simple ranking.
+     *
+     * @param hits results returned by a search
+     * @return map of bookmark tag to cumulative score, preserving first-seen order
+     */
     public LinkedHashMap<String, Double> getBookmarks(TopDocs hits) throws IOException {
-        LinkedHashMap<String, Double> bookmarkCounts = new LinkedHashMap<>(); // linked hash map helps rank bookmarks by score
+        LinkedHashMap<String, Double> bookmarkCounts = new LinkedHashMap<>();
         for (ScoreDoc scoreDoc : hits.scoreDocs) {
             Document document = this.getDocument(scoreDoc);
             String proc_id = document.get(LuceneConstants.BOOKMARK_TAG);
@@ -87,13 +118,22 @@ public class Searcher implements Closeable {
                 bookmarkCounts.put(proc_id, bookmarkCounts.getOrDefault(proc_id, (double) 0) + (double) scoreDoc.score);
             }
             System.out.print(" From time " + (startNum != null ? startNum : "?") + " to " + (endNum != null ? endNum : "?") + ": ");
-//            displayTokenUsingStandardAnalyzer(document.get(LuceneConstants.CONTENTS));
             System.out.println(document.get(LuceneConstants.CONTENTS));
         }
         return bookmarkCounts;
     }
 
-    // This method creates what we are mainly using for searches right now
+    /**
+     * Builds a combined boolean query using the provided phrase.
+     * <p>
+     * Depending on flags and symbols contained in the input phrase, this will combine:
+     * exact or phonetic phrase, optional concatenated/hyphenated variants, fuzzy terms (when '~' is used),
+     * and wildcard/prefix clauses (when '*' or '?' are present).
+     *
+     * @param phrase            user input phrase
+     * @param isPhoneticSearch  if true, build a phonetic phrase; otherwise an exact phrase
+     * @return a composed {@link BooleanQuery}
+     */
     public BooleanQuery createBooleanQuery(String phrase, boolean isPhoneticSearch) throws IOException {
         BooleanQuery.Builder booleanQueryBuilder = new BooleanQuery.Builder();
 
@@ -111,7 +151,6 @@ public class Searcher implements Closeable {
         List<String> tokens = analyzeWithStandard(LuceneConstants.CONTENTS, phrase);
 
         // If multi-token input like "hyper space", add concatenated and hyphenated single-term queries
-        // i.e. combine terms and search again
         if (tokens.size() >= 2 && !isPhoneticSearch) {
             StringBuilder sb = new StringBuilder();
             for (String t : tokens) sb.append(t);
@@ -133,7 +172,7 @@ public class Searcher implements Closeable {
             if (!phrase.contains(" ")) { // single term
                 booleanQueryBuilder.add(createFuzzyQuery(phrase), BooleanClause.Occur.SHOULD);
             } else {
-                // Option A: tokenize and add per-term fuzzy (be careful with performance)
+                // Tokenize and add per-term fuzzy (be mindful of performance)
                 for (String w : phrase.split("\\s+")) {
                     if (w.endsWith("~")) {
                         booleanQueryBuilder.add(createFuzzyQuery(w.substring(0, w.length()-1)), BooleanClause.Occur.SHOULD);
@@ -151,7 +190,7 @@ public class Searcher implements Closeable {
             // If single-token trailing-* like "hyper*", add an extra PrefixQuery with higher boost
             if (tokens.size() == 1) {
                 String tok = tokens.get(0);
-                // Use the raw term from the input for '*' detection (not analyzed), but fall back to token if needed
+                // Use the raw term from the input for '*' detection (not analyzed)
                 String raw = phrase.trim();
                 if (raw.endsWith("*") && !raw.contains("?") && raw.indexOf('*') == raw.length()-1) {
                     String prefix = raw.substring(0, raw.length()-1);
@@ -166,11 +205,14 @@ public class Searcher implements Closeable {
         // ensure at least one of the SHOULD clauses matches (configurable)
         booleanQueryBuilder.setMinimumNumberShouldMatch(this.minShouldMatch);
 
-        return booleanQueryBuilder.build(); // return combined fuzzy and wildcard query
+        return booleanQueryBuilder.build();
     }
 
-//  Below we implement methods to create different types of queries used in boolean query for refining searches
+    // Query builders used by the boolean query
 
+    /**
+     * Builds an exact {@link PhraseQuery} from the provided phrase using {@link StandardAnalyzer}.
+     */
     public Query createExactPhraseQuery(String phrase) throws IOException {
         PhraseQuery.Builder builder = new PhraseQuery.Builder();
         try (StandardAnalyzer standardAnalyzer = new StandardAnalyzer();
@@ -183,9 +225,12 @@ public class Searcher implements Closeable {
             }
         }
         builder.setSlop(this.phraseSlop);
-        return createBoostQuery(builder.build(), boostExact); // this returns a boosted PhraseQuery
+        return createBoostQuery(builder.build(), boostExact);
     }
 
+    /**
+     * Builds a phonetic {@link PhraseQuery} by analyzing the phrase with {@link MyPhoneticAnalyzer}.
+     */
     public Query createPhoneticPhraseQuery(String phrase) throws IOException {
         PhraseQuery.Builder builder = new PhraseQuery.Builder();
         try (MyPhoneticAnalyzer analyzer = new MyPhoneticAnalyzer();
@@ -194,15 +239,18 @@ public class Searcher implements Closeable {
             CharTermAttribute term = tokenStream.addAttribute(CharTermAttribute.class);
             tokenStream.reset();
             while (tokenStream.incrementToken()) {
-                // tokens produced are already phonetic representations
+                // Tokens produced are already phonetic representations
                 builder.add(new Term(LuceneConstants.CONTENTS, term.toString()));
             }
         }
         builder.setSlop(this.phraseSlop);
-        // return boosted phonetic phrase
         return createBoostQuery(builder.build(), boostPhonetic);
     }
 
+    /**
+     * Builds a {@link PhraseWildcardQuery} from the input phrase, converting trailing-asterisk
+     * terms to {@link PrefixQuery} when possible, and using {@link WildcardQuery} otherwise.
+     */
     public Query createPhraseWildcardQuery(String phrase) throws IOException {
         PhraseWildcardQuery.Builder builder = new PhraseWildcardQuery.Builder(LuceneConstants.CONTENTS, this.phraseSlop);
         String[] words = phrase.split("\\s+"); // split words by one/more whitespace
@@ -227,24 +275,27 @@ public class Searcher implements Closeable {
         return createBoostQuery(builder.build(), boostWildcard);
     }
 
+    /** Builds a fuzzy query for the given single term using {@code fuzzyEdits}. */
     public Query createFuzzyQuery(String phrase) {
         Term fuzzyTerm = new Term(LuceneConstants.CONTENTS, phrase);
         return createBoostQuery(new FuzzyQuery(fuzzyTerm, this.fuzzyEdits), boostFuzzy);
     }
 
+    /** Creates a generic {@link WildcardQuery} for the provided pattern. */
     public WildcardQuery createWildcardQuery(String phrase) {
         return new WildcardQuery(new Term(LuceneConstants.CONTENTS, phrase));
     }
 
+    /** Creates a {@link PrefixQuery} for the provided prefix. */
     public PrefixQuery createPrefixQuery(String phrase) throws IOException {
         return new PrefixQuery(new Term(LuceneConstants.CONTENTS, phrase));
     }
-    // Helps boost certain queries to have better score than others
+    /** Wraps a query into a {@link BoostQuery} with the given boost. */
     public Query createBoostQuery(Query query, float boost) {
         return new BoostQuery(query, boost);
     }
 
-    // Helper: analyze text with StandardAnalyzer into tokens
+    /** Helper to analyze text with {@link StandardAnalyzer} into a list of tokens. */
     private List<String> analyzeWithStandard(String field, String text) throws IOException {
         List<String> list = new ArrayList<>();
         try (StandardAnalyzer analyzer = new StandardAnalyzer();
@@ -258,7 +309,7 @@ public class Searcher implements Closeable {
         return list;
     }
 
-    // Helper method to print a separator line
+    /** Helper method to print a separator line. */
     public static void printSeparator(char character, int length) {
         for (int i = 0; i < length; i++) {
             System.out.print(character);
@@ -266,10 +317,12 @@ public class Searcher implements Closeable {
         System.out.println();
     }
 
+    /** @return whether the last built boolean query contained fuzzy components. */
     public boolean isFuzzy(){
         return isFuzzy;
     }
 
+    /** @return whether the last built boolean query contained wildcard components. */
     public boolean isWildcard(){
         return isWildcard;
     }
