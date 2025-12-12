@@ -2,7 +2,6 @@ package org.jsonsearch.lucene;
 
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriterConfig;
@@ -13,39 +12,53 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.json.simple.parser.ParseException;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.stream.Collectors;
 
 import static org.jsonsearch.lucene.Searcher.printSeparator;
 
-// Here we perform example tests on StarWards JSON files for indexing, querying, and searching
+/**
+ * Perform demo phrase search on StarWars JSON files found in {@link StarWarsTester#dataDir}
+ * Create exact index in {@link StarWarsTester#indexExactWordDir} and phonetic index in {@link StarWarsTester#indexPhoneticDir}
+ * Perform {@link StarWarsTester#exactWordSearch(String)} and {@link StarWarsTester#phoneticSearch(String)} using
+ * {@link Searcher#createBooleanQuery(String, boolean)}
+ */
 public class StarWarsTester {
     String indexPhoneticDir = "target/index/indexPhonetic"; // default moved under target/
     String indexExactWordDir = "target/index/indexExactWord"; // default moved under target/
     String dataDir = "src/main/resources"; //default JSON files location
     Indexer indexer; // mainly used for dictionary index
 
-    // Runtime-tunable boosts with defaults from constants
+    // Runtime-tunable boosts with defaults from constants (influence search results ranking)
     private float boostExact = LuceneConstants.BOOST_EXACT;
     private float boostPhonetic = LuceneConstants.BOOST_PHONETIC;
     private float boostWildcard = LuceneConstants.BOOST_WILDCARD;
     private float boostFuzzy = LuceneConstants.BOOST_FUZZY;
 
-    private int totalHits = 0;
-    private int maxSearch = LuceneConstants.MAX_SEARCH;
+    // Query params
+    private int totalHits = 0; // records total # search results
+    private int maxSearch = LuceneConstants.MAX_SEARCH; // max # results to retrieve
     private int phraseSlop = LuceneConstants.PHRASE_QUERY_SLOP;
-    private int minShouldMatch = 1;
-    private int fuzzyEdits = 2;
-    private int minOccur = LuceneConstants.MIN_OCCUR;
+    private int minShouldMatch = 1; // min # SHOULD clauses to match in boolean query
+    private int fuzzyEdits = 2; //Levenshtein distance for fuzzy queries
+    private int minOccur = LuceneConstants.MIN_OCCUR; // min total hits threshold used by CLI to decide whether results significant
 
     // Spellchecker runtime controls
-    private boolean rebuildSpellIndex = false; // rebuild dictionary index on startup
-    private int spellSuggestionsPerTerm = 2;   // per-term suggestion count
+    private boolean rebuildSpellIndex = false; // force rebuild dictionary index on startup
+    private int spellSuggestionsPerTerm = 2;   // per-term Spellchecker suggestion count
     private int maxSuggestionCombos = 5;       // cap on combined phrase suggestions
 
+    /**
+     * CLI: At startup, check and parse CLI flags
+     * User is prompted 1. whether to build indexes (y/n) and 2. search phrase ("phrase")
+     * Results displayed 1. exact and phonetic results and 2. suggestion search results if entered phrase !found
+     * Behind the scene:
+     * 1. Build indexes with user entered dir paths
+     * 2. Generate spell suggestions over exact index's directory
+     * 3. Results are merged and ranked into final bookmark tags with scores
+     * 4. Scores are boosted when searcher is called into building queries
+     * */
     public static void main(String[] args) throws IOException, ParseException {
         StarWarsTester tester = new StarWarsTester();
 
@@ -85,13 +98,15 @@ public class StarWarsTester {
                 tester.maxSearch, tester.phraseSlop, tester.minShouldMatch, tester.fuzzyEdits, tester.minOccur,
                 Boolean.toString(tester.rebuildSpellIndex), tester.spellSuggestionsPerTerm, tester.maxSuggestionCombos));
 
-        // Scanner for user input
+
+        // CLI: Scanner for user input
         Scanner sc = new Scanner(System.in);
 
         // Indexing - optional based on whether it has been done already
         System.out.println("Would you like to index search files? (y/n)");
         if (sc.nextLine().trim().equalsIgnoreCase("y")) {
-            // ask user to define which files to look for
+
+            // Ask user to define which files to look for
             System.out.println("Please enter filepath for search files ('Enter' default= \"src/main/resources\")");
             String dataPath = sc.nextLine().trim();
             if (!dataPath.isEmpty()){
@@ -101,7 +116,7 @@ public class StarWarsTester {
                 tester.setDataDir(tester.dataDir);
             }
 
-            // ask user to define where to store exact content index for search purposes
+            // Ask user to define where to store exact content index for query purposes
             System.out.println("Please enter filepath to store exact match index: ('Enter' default= \"target/index/indexExactWord\")");
             String indexExactPath = sc.nextLine().trim();
             if (!indexExactPath.isEmpty()){
@@ -110,7 +125,8 @@ public class StarWarsTester {
             else{
                 tester.setExactWordIndexDir(tester.indexExactWordDir);
             }
-            // ask user to define where to store phonetic index for search purposes
+
+            // Ask user to define where to store phonetic index for query purposes
             System.out.println("Please enter filepath to store phonetic index: ('Enter' default= \"target/index/indexPhonetic\")");
             String indexPhoneticPath = sc.nextLine().trim();
             if (!indexPhoneticPath.isEmpty()){
@@ -120,7 +136,7 @@ public class StarWarsTester {
                 tester.setPhoneticIndexDir(tester.indexPhoneticDir);
             }
 
-            // create index here
+            // Create indexes here
             tester.createPhoneticIndex();
             tester.createExactWordIndex();
         }
@@ -131,25 +147,28 @@ public class StarWarsTester {
         String phrase = sc.nextLine(); // search phrase
 
         // Spellchecker: create and use in try-with-resources to avoid leaks
-        List<String> suggestions;
         try (Directory spellIndexDir = FSDirectory.open(Paths.get("target/index/dictionaryIndex"));
-             SpellChecker spellChecker = new SpellChecker(spellIndexDir);
 
-             // access exact phrase index and produce a dictionary index based on our files indexed
+             // Access exact phrase index and produce a dictionary index based on our files indexed
              Directory mainIndexDir = FSDirectory.open(Paths.get(tester.getExactIndexDir()));
              IndexReader indexReader = DirectoryReader.open(mainIndexDir);
              StandardAnalyzer standardAnalyzer = new StandardAnalyzer()) {
+
+            SpellChecker spellChecker = new SpellChecker(spellIndexDir);
             // Reuse the spell index across runs; rebuild only if requested or missing
             ensureSpellIndex(spellChecker, spellIndexDir, indexReader, standardAnalyzer, tester.rebuildSpellIndex);
             // Build per-term suggestions and combine into phrases
-            suggestions = tester.buildPerTermSuggestions(phrase, spellChecker, standardAnalyzer, tester.spellSuggestionsPerTerm, tester.maxSuggestionCombos);
+            List<String> suggestions = tester.buildPerTermSuggestions(phrase, spellChecker, standardAnalyzer, tester.spellSuggestionsPerTerm, tester.maxSuggestionCombos);
             
             // Results for exact search phrase
             SearchOutcome exactOutcome = tester.exactWordSearch(phrase);
             tester.merge(finalResults, exactOutcome.bookmarksByTag);
             System.out.print(exactOutcome.totalHits + " exact matches found ");
             System.out.println("with bookmark tags: " + exactOutcome.bookmarksByTag);
+
+            // Keep track of how many total hits
             tester.totalHits += exactOutcome.totalHits;
+
             printSeparator('=', 75);
 
             // Results for phonetically similar phrase
@@ -187,30 +206,30 @@ public class StarWarsTester {
         }
         else{
             System.out.println("No significant results with MIN_OCCUR > " + tester.minOccur);
-
         }
-
-
     }
 
+    /** Changes where the JSON files we need to index are located */
     public void setDataDir(String path) {
         dataDir = path;
     }
 
-    public void setPhoneticIndexDir(String path) {
-        indexPhoneticDir = path;
-    }
-
-    public void setExactWordIndexDir(String path) {
-        indexExactWordDir = path;
-    }
-
-    // use to access index created
+    /** Access index dir path created and return path */
     public String getExactIndexDir() {
         return indexExactWordDir;
     }
 
-    // Calls Indexer to process JSON files content from indexDir into lucene index with phonetic filter in dataDir
+    /** Changes the exact phrase index directory path, based on user input */
+    public void setExactWordIndexDir(String path) {
+        indexExactWordDir = path;
+    }
+
+    /** Changes the phonetic phrase index directory path, based on user input */
+    public void setPhoneticIndexDir(String path) {
+        indexPhoneticDir = path;
+    }
+
+    /** Calls Indexer to process JSON files content from indexDir into lucene index with phonetic filter in dataDir */
     public void createExactWordIndex() throws IOException, ParseException {
         try (StandardAnalyzer standardAnalyzer = new StandardAnalyzer()) {
             indexer = new Indexer(indexExactWordDir, standardAnalyzer);
@@ -228,7 +247,7 @@ public class StarWarsTester {
         }
     }
 
-    // Calls Indexer to process JSON files content from indexDir into lucene index with phonetic filter in dataDir
+    /** Calls Indexer to process JSON files content from indexDir into lucene index with phonetic filter in dataDir */
     public void createPhoneticIndex() throws IOException, ParseException {
         try (MyPhoneticAnalyzer phoneticAnalyzer = new MyPhoneticAnalyzer()) {
             indexer = new Indexer(indexPhoneticDir, phoneticAnalyzer);
@@ -247,7 +266,7 @@ public class StarWarsTester {
     }
 
 
-    // Creates query based on exact phrase; returns found bookmark tags and total scores per tag
+    /** Creates query based on exact phrase; returns found bookmark tags and total scores per tag */
     public SearchOutcome exactWordSearch(String phrase) throws IOException {
         long startTime = System.currentTimeMillis();
         LinkedHashMap<String, Double> result;
@@ -266,7 +285,7 @@ public class StarWarsTester {
         return new SearchOutcome(result, total);
     }
 
-    // Creates query based on phonetics of a phrase; returns found bookmark tags IDs and total scores per tag
+    /** Creates a query based on phonetics of a phrase; returns a map of found bookmark tags and total scores per tag */
     public SearchOutcome phoneticSearch(String phrase) throws IOException {
         long startTime = System.currentTimeMillis();
         LinkedHashMap<String, Double> result;
