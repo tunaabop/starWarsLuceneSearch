@@ -1,27 +1,28 @@
 package org.jsonsearch.lucene;
 
 /**
- * Central location for field names and default tuning parameters used by indexing and searching.
+ * Defines field names and default tuning parameters used by indexing and searching.
  */
 public class LuceneConstants {
     /** Field containing the main textual contents. */
     public static final String CONTENTS = "text";
-    /** Stored original file name. */
+    /** Stored original file name. Indexed @ beginning of a Lucene doc */
     public static final String FILE_NAME = "filename";
-    /** Stored original canonical file path. */
+    /** Stored original canonical file path. Indexed @ beginning of a Lucene doc*/
     public static final String FILE_PATH = "filepath";
-    /** Bookmark tag field used to aggregate and display results. */
+    /** Bookmark tag field used to aggregate/display search results.
+     * Should be found once per JSON file. Indexed @ beginning of a Lucene doc*/
     public static final String BOOKMARK_TAG = "bookmark_tag";
     /** Optional start time (or offset) field for result snippets. */
     public static final String START = "start";
     /** Optional end time (or offset) field for result snippets. */
     public static final String END = "end";
-
-    /** Default maximum number of search hits to return. */
+    /** Default maximum number of search hits to return. This can affect scoring/boosts. */
     public static final int MAX_SEARCH = 10;
-    /** Minimum total occurrences across results required to consider output significant. */
-    public static final int MIN_OCCUR = 20;
-    /** Allowed phrase slop for phrase queries. */
+    /** Minimum total occurrences across results required to consider results significant.
+     * This can affect final search results */
+    public static final int MIN_OCCUR = 2;
+    /** Allowed phrase slop for phrase queries. This can affect scoring/boosts.  */
     public static final int PHRASE_QUERY_SLOP = 2;
 
     /** Boost weight for exact phrase matches. */
