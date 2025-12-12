@@ -10,8 +10,9 @@ import org.apache.lucene.analysis.standard.StandardTokenizer;
 /**
  * Analyzer that applies standard tokenization followed by phonetic encoding.
  * <p>
- * The underlying {@link PhoneticFilter} uses {@link DoubleMetaphone} to produce
+ * The underlying {@link PhoneticFilter} uses {@link DoubleMetaphone} (good for English phrases) to produce
  * phonetic representations of tokens, enabling fuzzy matching based on sound-alikes.
+ * Usage in {@link StarWarsTester} to create phonetic index and in {@link Searcher} to create a phonetic phrase query
  */
 public class MyPhoneticAnalyzer extends Analyzer {
 
@@ -24,8 +25,12 @@ public class MyPhoneticAnalyzer extends Analyzer {
     @Override
     protected TokenStreamComponents createComponents(String fieldName) {
         Tokenizer tokenizer = new StandardTokenizer();
+
         // Use phonetic encoding (not injecting original terms) for compact indices
+        // Note: inject=false means exact spelling of the word is removed from the token stream and replaced by
+        // phonetics, which helps us separate phonetic and exact representation
         TokenStream stream = new PhoneticFilter(tokenizer, new DoubleMetaphone(), false);
+
         return new TokenStreamComponents(tokenizer, stream);
     }
 }
