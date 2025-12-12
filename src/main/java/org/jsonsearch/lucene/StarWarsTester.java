@@ -25,8 +25,8 @@ import static org.jsonsearch.lucene.Searcher.printSeparator;
 public class StarWarsTester {
     String indexPhoneticDir = "target/index/indexPhonetic"; // default moved under target/
     String indexExactWordDir = "target/index/indexExactWord"; // default moved under target/
-    String dataDir = "src/main/resources"; //default TODO: test with difference dir
-    Indexer indexer;
+    String dataDir = "src/main/resources"; //default JSON files location
+    Indexer indexer; // mainly used for dictionary index
 
     // Runtime-tunable boosts with defaults from constants
     private float boostExact = LuceneConstants.BOOST_EXACT;
@@ -88,7 +88,7 @@ public class StarWarsTester {
         // Scanner for user input
         Scanner sc = new Scanner(System.in);
 
-        // Indexing
+        // Indexing - optional based on whether it has been done already
         System.out.println("Would you like to index search files? (y/n)");
         if (sc.nextLine().trim().equalsIgnoreCase("y")) {
             // ask user to define which files to look for
@@ -134,6 +134,8 @@ public class StarWarsTester {
         List<String> suggestions;
         try (Directory spellIndexDir = FSDirectory.open(Paths.get("target/index/dictionaryIndex"));
              SpellChecker spellChecker = new SpellChecker(spellIndexDir);
+
+             // access exact phrase index and produce a dictionary index based on our files indexed
              Directory mainIndexDir = FSDirectory.open(Paths.get(tester.getExactIndexDir()));
              IndexReader indexReader = DirectoryReader.open(mainIndexDir);
              StandardAnalyzer standardAnalyzer = new StandardAnalyzer()) {
@@ -179,7 +181,7 @@ public class StarWarsTester {
         if(tester.totalHits > tester.minOccur) {
             System.out.println("Top results for phrase: \"" + phrase + "\"");
 
-            // print final
+            // print final, SORTED results
             finalResults = (LinkedHashMap<String, Double>) tester.sortByValue(finalResults); // sort bookmarks by score
             System.out.println("FINAL BOOKMARK TAGS w/ SCORES: " + finalResults);
         }

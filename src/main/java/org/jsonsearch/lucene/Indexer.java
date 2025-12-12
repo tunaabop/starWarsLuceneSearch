@@ -47,11 +47,11 @@ public class Indexer {
                         && file.exists()
                         && file.canRead()
                         && filter.accept(file)) {
-                    indexFile(file);
+                    indexFile(file); // index per file
                 }
             }
         }
-        return writer.getDocStats().numDocs;
+        return writer.getDocStats().numDocs; // how many lucene docs created
 
     }
 
@@ -135,6 +135,7 @@ public class Indexer {
     }
 
     // Helper: find first occurrence of bookmark_tag from the parsed root
+    // ideally does not have to go thru the whole thing b/c bookmark tag should be near front
     private String findBookmarkTagFirst(Object node) {
         if (node instanceof JSONObject jsonObject) {
             Object val = jsonObject.get(LuceneConstants.BOOKMARK_TAG);

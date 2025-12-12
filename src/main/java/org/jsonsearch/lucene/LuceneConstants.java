@@ -16,4 +16,6 @@ public class LuceneConstants {
     public static final float BOOST_PHONETIC = 1.0f;
     public static final float BOOST_WILDCARD = 5f;
     public static final float BOOST_FUZZY = 5f;
+    // Additional boost for prefix (trailing-*) matches to prioritize cleaner prefix over generic wildcard
+    public static final float BOOST_PREFIX = 1.5f;
 }
