@@ -21,21 +21,24 @@ import java.nio.file.Paths;
 /**
  * Creates a Lucene index from JSON files.
  * <p>
- * Each JSON object encountered in the input files is converted into a Lucene {@link Document}
+ * Each JSON object encountered in the input JSON files is converted into a Lucene {@link Document}
  * with fields inferred from value types. Universal metadata (file name, path, bookmark tag) is
- * added to every document.
+ * added to every Lucene document.
  */
 public class Indexer {
     private final IndexWriter writer;
 
-    /** Per-file parsing context holder to avoid mutable instance state. */
+    /** Per-file parsing context holder to avoid mutable instance state, specifically for bookmarkTag
+     *  since it occurs once per file but we add to every corresponding Lucene doc created per text field */
     private static final class ParseContext {
         final String bookmarkTag;
         ParseContext(String bookmarkTag) { this.bookmarkTag = bookmarkTag != null ? bookmarkTag : ""; }
     }
 
     /**
-     * Opens/creates an index at the given directory using the provided analyzer.
+     * Opens/creates an index at the given directory using the provided analyzer
+     * (either StandardAnalyzer or MyPhoneticAnalyzer). Having the correct analyzer is required to
+     *  process text correctly.
      *
      * @param indexDirectoryPath path to the index directory
      * @param analyzer analyzer used to process text
@@ -52,7 +55,7 @@ public class Indexer {
     }
 
     /**
-     * Indexes all JSON files in a directory accepted by the given filter.
+     * Indexes all JSON files in a directory accepted by the given filter (in our case, JSON type)
      *
      * @param dataDirPath directory containing JSON files
      * @param filter file filter (e.g., {@link JsonFileFilter})
@@ -69,7 +72,7 @@ public class Indexer {
                         && file.exists()
                         && file.canRead()
                         && filter.accept(file)) {
-                    indexFile(file);
+                    indexFile(file); // here we parse every JSON file found
                 }
             }
         }
@@ -80,25 +83,27 @@ public class Indexer {
     /** Indexes a single JSON file by parsing and adding its contents. */
     private void indexFile(File file) throws IOException, ParseException {
         System.out.println("Indexing file: " + file.getCanonicalPath());
-        parseJSONFile(file);
+        parseJSONFile(file); // parsing JSON file here using JSON simple
     }
 
-    /** Parses a JSON file into objects and dispatches for indexing. */
+    /** Parses a JSON file into objects and dispatches for indexing. This is done using json-simple */
     private void parseJSONFile(File file) throws IOException, ParseException {
         JSONParser  parser = new JSONParser();
         Object root = parser.parse(new FileReader(file.getPath()));
+
         // Determine bookmark tag once per file (root-level or first occurrence)
         String bookmark = findBookmarkTagFirst(root);
-        ParseContext ctx = new ParseContext(bookmark);
+        ParseContext ctx = new ParseContext(bookmark); // use of ParseContext to avoid mutable bookmark state
+
         parseJsonElement(root, file, ctx);
     }
 
     /** Recursively parses the JSON tree and indexes each object encountered. */
     private void parseJsonElement(Object element, File file, ParseContext ctx) throws IOException, ParseException {
         if (element instanceof JSONObject jsonObject) {
-            parseJsonObject(jsonObject, file, ctx);
+            parseJsonObject(jsonObject, file, ctx); // if it's a simple JSON object, create lucene doc and process fields here
         } else if (element instanceof JSONArray jsonArray) {
-            for (Object obj : jsonArray) {
+            for (Object obj : jsonArray) { // if it's an array, recursive call to process each object in array
                 parseJsonElement(obj, file, ctx);
             }
         }
@@ -114,9 +119,9 @@ public class Indexer {
         // Add bookmark tag exactly once per document using the file-scoped context
         d.add(new StringField(LuceneConstants.BOOKMARK_TAG, ctx.bookmarkTag, Field.Store.YES));
 
-        for (Object key : jsonObject.keySet()) {
-            String fieldName = (String) key;
-            Object fieldValue = jsonObject.get(fieldName);
+        for (Object key : jsonObject.keySet()) { // goes through every field in this object
+            String fieldName = (String) key; // retrieve field name
+            Object fieldValue = jsonObject.get(fieldName); // retrieve field value
 
             // Create fields based on type and add to document
             Class<?> fieldType = fieldValue != null ? fieldValue.getClass() : null;
@@ -133,6 +138,7 @@ public class Indexer {
                 d.add(new StoredField(fieldName, (Long) fieldValue));
             }
             else if (fieldType == Double.class) {
+                // For fields like "start" and "end" that records time when text occurs
                 d.add(new DoublePoint(fieldName, (Double) fieldValue));
                 d.add(new StoredField(fieldName, (Double) fieldValue));
             }
@@ -161,7 +167,7 @@ public class Indexer {
     }
 
     /**
-     * Finds the first occurrence of {@link LuceneConstants#BOOKMARK_TAG} within the parsed JSON tree.
+     * Used in parseJsonFile() to find the first occurrence of {@link LuceneConstants#BOOKMARK_TAG} within the parsed JSON tree.
      *
      * @param node root or sub-node to inspect
      * @return the first non-empty bookmark tag, or an empty string if not present
@@ -173,6 +179,7 @@ public class Indexer {
             for (Object k : jsonObject.keySet()) {
                 Object child = jsonObject.get((String) k);
                 String found = findBookmarkTagFirst(child);
+                // should not take up too much time if bookmark_tag is defined @ the beginning of our JSON file
                 if (found != null && !found.isEmpty()) return found;
             }
         } else if (node instanceof JSONArray arr) {
