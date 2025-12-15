@@ -60,6 +60,7 @@ public class StarWarsTester {
      * 4. Scores are boosted when searcher is called into building queries
      * */
     public static void main(String[] args) throws IOException, ParseException {
+        System.out.println("Running with Java Version: " + System.getProperty("java.version"));
         StarWarsTester tester = new StarWarsTester();
 
         // Parse CLI flags for boosts and query params
