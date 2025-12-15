@@ -429,7 +429,7 @@ public class StarWarsTester {
             if (spellChecker.exist(term)) {
                 options.add(term);
             } else {
-                String[] suggestions = spellChecker.suggestSimilar(term, perTerm);
+                @Nullable String[] suggestions = spellChecker.suggestSimilar(term, perTerm);
                 if (suggestions != null && suggestions.length > 0) {
                     Collections.addAll(options, suggestions);
                 } else {
@@ -477,13 +477,13 @@ public class StarWarsTester {
         return out;
     }
 
-    // Checks whether a multi-term joined phrase exists in the index dictionary, if so, add suggestions based on the phrase
+    // Helper: checks whether a multi-term joined phrase exists in the index dictionary, if so, add suggestions based on the phrase
     private void checkCombinedPhrase(String phrase, SpellChecker spellChecker, int perTerm, List<String> combined, String joined) throws IOException {
         if (!joined.equalsIgnoreCase(phrase)) {
             if (spellChecker.exist(joined)) {
                 combined.add(joined);
             } else {
-                String[] combinedPhraseSuggestions = spellChecker.suggestSimilar(joined, perTerm);
+                @Nullable String[] combinedPhraseSuggestions = spellChecker.suggestSimilar(joined, perTerm);
                 if (combinedPhraseSuggestions != null) {
                     Collections.addAll(combined, combinedPhraseSuggestions);
                 }

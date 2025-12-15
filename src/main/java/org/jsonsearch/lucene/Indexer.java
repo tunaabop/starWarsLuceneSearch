@@ -63,9 +63,10 @@ public class Indexer {
      * @throws ParseException if JSON parsing fails
      */
     public int createIndex(String dataDirPath, FileFilter filter) throws IOException, ParseException {
-        File[] files = new File(dataDirPath).listFiles();
+        @Nullable File[] files = new File(dataDirPath).listFiles();
         if (files != null) {
-            for (File file : files) {
+            for (@Nullable File file : files) {
+                assert file != null;
                 if(!file.isDirectory()
                         && !file.isHidden()
                         && file.exists()
@@ -92,6 +93,7 @@ public class Indexer {
 
         // Determine a bookmark tag once per file (root-level or first occurrence)
         String bookmark = findBookmarkTagFirst(root);
+        assert bookmark != null;
         ParseContext ctx = new ParseContext(bookmark); // use of ParseContext to avoid mutable bookmark state
 
         parseJsonElement(root, file, ctx);
@@ -111,7 +113,6 @@ public class Indexer {
     /**
      * Converts a single JSON object into a Lucene document, adding fields based on value types.
      */
-    @NullMarked
     private void parseJsonObject(JSONObject jsonObject, File file, ParseContext ctx) throws IOException, ParseException {
         // Create a new document and add universal fields first
         Document d = createLuceneDocument(file);
@@ -173,7 +174,7 @@ public class Indexer {
      * @param node root or sub-node to inspect
      * @return the first non-empty bookmark tag, or an empty string if not present
      */
-    private String findBookmarkTagFirst(Object node) {
+    private @Nullable String findBookmarkTagFirst(Object node) {
         if (node instanceof JSONObject jsonObject) {
             Object val = jsonObject.get(LuceneConstants.BOOKMARK_TAG);
             if (val instanceof String s) return s;
@@ -181,15 +182,17 @@ public class Indexer {
                 Object child = jsonObject.get(k);
                 String found = findBookmarkTagFirst(child);
                 // should not take up too much time if bookmark_tag is defined @ the beginning of our JSON file
+                assert found != null;
                 if (!found.isEmpty()) return found;
             }
         } else if (node instanceof JSONArray arr) {
             for (Object child : arr) {
                 String found = findBookmarkTagFirst(child);
+                assert found != null;
                 if (!found.isEmpty()) return found;
             }
         }
-        return ""; // Fallback when not present
+        return null; // Fallback when not present
     }
 
     /**
