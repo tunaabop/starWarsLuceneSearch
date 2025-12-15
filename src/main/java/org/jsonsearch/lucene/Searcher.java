@@ -36,17 +36,29 @@ public class Searcher implements Closeable {
     private float boostPhonetic = LuceneConstants.BOOST_PHONETIC;
     private float boostWildcard = LuceneConstants.BOOST_WILDCARD;
     private float boostFuzzy = LuceneConstants.BOOST_FUZZY;
-    private float boostPrefix = LuceneConstants.BOOST_PREFIX;
 
     // Runtime query params
     private int maxSearch = LuceneConstants.MAX_SEARCH;
     private int phraseSlop = LuceneConstants.PHRASE_QUERY_SLOP;
+
+    // Used for boolean query search, # SHOULD clauses needed to match
     private int minShouldMatch = 1;
+    // used for fuzzy query search, # edits allowed for fuzzy phrase results
     private int fuzzyEdits = 2;
 
+    // Whether a phrase is fuzzy
     private boolean isFuzzy = false;
+    // Whether a phrase is a wildcard
     private boolean isWildcard = false;
 
+    /** Constructor of a Searcher
+     *
+     * <p>
+     *     Takes an index path, initializes a reader to read index, and an indexSearcher to search in the given index
+     * </p>
+     *
+     * @param indexDirectoryPath A String directory path of where the index is stored
+     */
     public Searcher(String indexDirectoryPath) throws IOException {
         this.reader = DirectoryReader.open(FSDirectory.open(Paths.get(indexDirectoryPath)));
         this.indexSearcher = new IndexSearcher(reader);
@@ -101,7 +113,7 @@ public class Searcher implements Closeable {
     }
 
     /**
-     * Aggregates bookmark tags from hits and sums their scores for simple ranking.
+     * Aggregates bookmark tags from hits and sums their scores for a simple ranking.
      *
      * @param hits results returned by a search
      * @return map of bookmark tag to cumulative score, preserving first-seen order
@@ -109,15 +121,25 @@ public class Searcher implements Closeable {
     public LinkedHashMap<String, Double> getBookmarks(TopDocs hits) throws IOException {
         LinkedHashMap<String, Double> bookmarkCounts = new LinkedHashMap<>();
         for (ScoreDoc scoreDoc : hits.scoreDocs) {
+
+            // Retrieve the current Lucene doc, which has field info values
             Document document = this.getDocument(scoreDoc);
+
+            // Retrieve the document's bookmark tag ID
             String proc_id = document.get(LuceneConstants.BOOKMARK_TAG);
+
+            // Retrieve start and end time of when text is said
             IndexableField startField = document.getField(LuceneConstants.START);
-            IndexableField endField = document.getField(LuceneConstants.END);
             Number startNum = startField != null ? startField.numericValue() : null;
+            IndexableField endField = document.getField(LuceneConstants.END);
             Number endNum = endField != null ? endField.numericValue() : null;
+
+            // For each hit, add its document bookmark tag and its search score to bookmarkCounts
             if (proc_id != null) {
                 bookmarkCounts.put(proc_id, bookmarkCounts.getOrDefault(proc_id, (double) 0) + (double) scoreDoc.score);
             }
+
+            // Here, we want to see what text is said and when
             System.out.print(" From time " + (startNum != null ? startNum : "?") + " to " + (endNum != null ? endNum : "?") + ": ");
             System.out.println(document.get(LuceneConstants.CONTENTS));
         }
@@ -137,13 +159,14 @@ public class Searcher implements Closeable {
      */
     public BooleanQuery createBooleanQuery(String phrase, boolean isPhoneticSearch) throws IOException {
 
-        // Builder to build boolean query, we can add various query clauses to this builder
+        // Builder, to build a boolean query, we can add various query clauses to this builder
         BooleanQuery.Builder booleanQueryBuilder = new BooleanQuery.Builder();
 
         // Tokenize using StandardAnalyzer for helper clauses (concatenated/hyphenated variants, prefix extras)
-        List<String> tokens = analyzeWithStandard(LuceneConstants.CONTENTS, phrase);
+        List<String> tokens = analyzeWithStandard(phrase);
 
         // If multi-token input like "hyper space", add concatenated and hyphenated single-term queries
+        float boostPrefix = LuceneConstants.BOOST_PREFIX;
         if (tokens.size() >= 2 && !isPhoneticSearch) {
             StringBuilder sb = new StringBuilder();
             for (String t : tokens) sb.append(t);
@@ -180,9 +203,9 @@ public class Searcher implements Closeable {
             Query wildcardPhraseQuery = createPhraseWildcardQuery(phrase);
             booleanQueryBuilder.add(wildcardPhraseQuery, BooleanClause.Occur.SHOULD);
 
-            // If single-token trailing-* like "hyper*", add an extra PrefixQuery with higher boost
+            // If single-token trailing-* like "hyper*", add an extra PrefixQuery with a higher boost
             if (tokens.size() == 1) {
-                String tok = tokens.get(0);
+//                String tok = tokens.getFirst();
                 // Use the raw term from the input for '*' detection (not analyzed)
                 String raw = phrase.trim();
                 if (raw.endsWith("*") && !raw.contains("?") && raw.indexOf('*') == raw.length()-1) {
@@ -195,16 +218,16 @@ public class Searcher implements Closeable {
             }
         }
 
-        // Creating simple phrase query, either exact or based on phonetics
+        // Creating a simple phrase query, either exact or based on phonetics
         Query phraseQuery;
 
-        // Creating exact phrase query
+        // Creating an exact phrase query
         if (!isPhoneticSearch) {
             phraseQuery = createExactPhraseQuery(phrase);
             booleanQueryBuilder.add(phraseQuery, BooleanClause.Occur.SHOULD);
 
-        // Creating phonetic phrase query. If searching for fuzzy/wildcards, don't search phonetics
-        } else if(!isFuzzy || !isWildcard) {
+        // Creating a phonetic phrase query. If searching for fuzzy/wildcards, don't search phonetics
+        } else if(!isFuzzy() || !isWildcard()) {
             phraseQuery = createPhoneticPhraseQuery(phrase);
             booleanQueryBuilder.add(phraseQuery, BooleanClause.Occur.SHOULD);
         }
@@ -260,7 +283,7 @@ public class Searcher implements Closeable {
      * 3. Builds a {@link PhraseWildcardQuery} from the input phrase, converting trailing-asterisk
      * terms to {@link PrefixQuery} when possible, and using {@link WildcardQuery} otherwise.
      */
-    public Query createPhraseWildcardQuery(String phrase) throws IOException {
+    public Query createPhraseWildcardQuery(String phrase) {
 
         PhraseWildcardQuery.Builder builder = new PhraseWildcardQuery.Builder(LuceneConstants.CONTENTS, this.phraseSlop);
 
@@ -283,7 +306,7 @@ public class Searcher implements Closeable {
             }
             else {
                 // For a regular term in this wildcard phrase, add it directly
-                // e.g. Phrase "hyper* space", add "space" normally
+                // e.g., Phrase "hyper* space", add "space" normally
                 builder.addTerm(new Term(LuceneConstants.CONTENTS, word));
             }
         }
@@ -302,7 +325,7 @@ public class Searcher implements Closeable {
     }
 
     /** 6. Builds a {@link PrefixQuery} for the provided prefix. */
-    public PrefixQuery createPrefixQuery(String phrase) throws IOException {
+    public PrefixQuery createPrefixQuery(String phrase) {
         return new PrefixQuery(new Term(LuceneConstants.CONTENTS, phrase));
     }
     /** 7. Wraps any query given into a {@link BoostQuery} with the given boost. */
@@ -311,10 +334,10 @@ public class Searcher implements Closeable {
     }
 
     /** Helper: analyze text with {@link StandardAnalyzer} into a list of tokens. */
-    private List<String> analyzeWithStandard(String field, String text) throws IOException {
+    private List<String> analyzeWithStandard(String text) throws IOException {
         List<String> list = new ArrayList<>();
         try (StandardAnalyzer analyzer = new StandardAnalyzer();
-             TokenStream tokenStream = analyzer.tokenStream(field, new StringReader(text))) {
+             TokenStream tokenStream = analyzer.tokenStream(LuceneConstants.CONTENTS, new StringReader(text))) {
             CharTermAttribute term = tokenStream.addAttribute(CharTermAttribute.class);
             tokenStream.reset();
             while (tokenStream.incrementToken()) {
@@ -343,6 +366,7 @@ public class Searcher implements Closeable {
     }
 
 
+    /** This step closes the index reader. */
     @Override
     public void close() throws IOException {
         reader.close();

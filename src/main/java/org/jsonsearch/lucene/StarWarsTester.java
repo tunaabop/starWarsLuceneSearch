@@ -28,9 +28,9 @@ import static org.jsonsearch.lucene.Searcher.printSeparator;
  */
 @NullMarked
 public class StarWarsTester {
-    String indexPhoneticDir = "target/index/indexPhonetic"; // default moved under target/
-    String indexExactWordDir = "target/index/indexExactWord"; // default moved under target/
-    String dataDir = "src/main/resources"; //default JSON files location
+    private String indexPhoneticDir = LuceneConstants.DEFAULT_PHONETIC_INDEX; // default moved under target/
+    private String indexExactWordDir = LuceneConstants.DEFAULT_EXACT_INDEX; // default moved under target/
+    private String dataDir = LuceneConstants.DEFAULT_DATA; //default JSON files location
     @Nullable Indexer indexer; // mainly used for dictionary index
 
     // Runtime-tunable boosts with defaults from constants (influence search results ranking)
@@ -45,7 +45,7 @@ public class StarWarsTester {
     private int phraseSlop = LuceneConstants.PHRASE_QUERY_SLOP;
     private int minShouldMatch = 1; // min # SHOULD clauses to match in a boolean query
     private int fuzzyEdits = 2; //Levenshtein distance for fuzzy queries
-    private int minOccur = LuceneConstants.MIN_OCCUR; // min total hits threshold used by CLI to decide whether results significant
+    private int minOccur = LuceneConstants.MIN_OCCUR; // min total hits the threshold used by CLI to decide whether results significant
 
     // Spellchecker runtime controls
     private boolean rebuildSpellIndex = false; // force rebuild dictionary index on startup
@@ -58,7 +58,7 @@ public class StarWarsTester {
      * Results displayed 1. exact and phonetic results and 2. suggestion search results if entered phrase !found
      * Behind the scene:
      * 1. Build indexes with user entered dir paths
-     * 2. Generate spell suggestions over exact index's directory
+     * 2. Generate spell suggestions over the exact index's directory
      * 3. Results are merged and ranked into final bookmark tags with scores
      * 4. Scores are boosted when searcher is called into building queries
      * */
@@ -111,7 +111,7 @@ public class StarWarsTester {
         System.out.println("Would you like to index search files? (y/n)");
         if (sc.nextLine().trim().equalsIgnoreCase("y")) {
 
-            // Ask user to define which files to look for
+            // Ask the user to define which files to look for
             System.out.println("Please enter filepath for search files ('Enter' default= \"src/main/resources\")");
             String dataPath = sc.nextLine().trim();
             if (!dataPath.isEmpty()){
@@ -121,7 +121,7 @@ public class StarWarsTester {
                 tester.setDataDir(tester.dataDir);
             }
 
-            // Ask user to define where to store exact content index for query purposes
+            // Ask the user to define where to store the exact content index for query purposes
             System.out.println("Please enter filepath to store exact match index: ('Enter' default= \"target/index/indexExactWord\")");
             String indexExactPath = sc.nextLine().trim();
             if (!indexExactPath.isEmpty()){
@@ -131,7 +131,7 @@ public class StarWarsTester {
                 tester.setExactWordIndexDir(tester.indexExactWordDir);
             }
 
-            // Ask user to define where to store phonetic index for query purposes
+            // Ask the user to define where to store phonetic index for query purposes
             System.out.println("Please enter filepath to store phonetic index: ('Enter' default= \"target/index/indexPhonetic\")");
             String indexPhoneticPath = sc.nextLine().trim();
             if (!indexPhoneticPath.isEmpty()){
@@ -154,7 +154,7 @@ public class StarWarsTester {
         // Spellchecker: create and use in try-with-resources to avoid leaks
         try (Directory spellIndexDir = FSDirectory.open(Paths.get("target/index/dictionaryIndex"));
 
-             // Access exact phrase index and produce a dictionary index based on our files indexed
+             // Access the exact phrase index and produce a dictionary index based on our files indexed
              Directory mainIndexDir = FSDirectory.open(Paths.get(tester.getExactIndexDir()));
              IndexReader indexReader = DirectoryReader.open(mainIndexDir);
              StandardAnalyzer standardAnalyzer = new StandardAnalyzer()) {
@@ -165,7 +165,7 @@ public class StarWarsTester {
             // Build per-term suggestions and combine into phrases
             List<String> suggestions = tester.buildPerTermSuggestions(phrase, spellChecker, standardAnalyzer, tester.spellSuggestionsPerTerm, tester.maxSuggestionCombos);
             
-            // Results for exact search phrase
+            // Results for the exact search phrase
             SearchOutcome exactOutcome = tester.exactWordSearch(phrase);
             tester.merge(finalResults, exactOutcome.bookmarksByTag);
             System.out.print(exactOutcome.totalHits + " exact matches found ");
@@ -176,7 +176,7 @@ public class StarWarsTester {
 
             printSeparator('=', 75);
 
-            // Results for phonetically similar phrase
+            // Results for a phonetically similar phrase
             System.out.println("Searching for similar phonetics...");
             SearchOutcome phoneticOutcome = tester.phoneticSearch(phrase);
             tester.merge(finalResults, phoneticOutcome.bookmarksByTag);
@@ -185,7 +185,7 @@ public class StarWarsTester {
             tester.totalHits += phoneticOutcome.totalHits;
             printSeparator('=', 75);
 
-            // Give suggestions when search phrase is not found, or when < min occur, suggest alternatives
+            // Give suggestions when a search phrase is not found, or when < min occurs, suggest alternatives
             if ( !suggestions.isEmpty() && tester.totalHits < LuceneConstants.MIN_OCCUR) {
                 System.out.println("Here are some suggestion searches:");
                 for (String current_suggestion : suggestions) {
@@ -271,7 +271,7 @@ public class StarWarsTester {
     }
 
 
-    /** Creates a query based on exact phrase; returns found bookmark tags and total scores per tag */
+    /** Creates a query based on the exact phrase; returns found bookmark tags and total scores per tag */
     private SearchOutcome exactWordSearch(String phrase) throws IOException {
         long startTime = System.currentTimeMillis();
         LinkedHashMap<String, Double> result;
@@ -358,7 +358,7 @@ public class StarWarsTester {
         }
     }
 
-    // Helper: build or reuse spell index: rebuild if flag is true or index does not exist/has no docs
+    // Helper: build or reuse spell index: rebuild if a flag is true or the index does not exist/has no docs
     private static void ensureSpellIndex(SpellChecker spellChecker,
                                          Directory spellIndexDir,
                                          IndexReader mainIndexReader,
@@ -411,7 +411,6 @@ public class StarWarsTester {
      * @param perTerm The number of spell suggestions to produce per term (default 2)
      * @param maxCombos The maximum # of combos from combining terms (default 5)
      * @return a list of suggestions based on per-term analysis
-     * @throws IOException
      */
     private List<String> buildPerTermSuggestions(String phrase,
                                                  SpellChecker spellChecker,
@@ -423,7 +422,7 @@ public class StarWarsTester {
 
         List<List<String>> perTermOptions = new ArrayList<>();
         // Goes through all term tokens in a search phrase, add to options to consider if
-        // term exists in spell-index dictionary;
+        //  a term exists in spell-index dictionary;
         // Else, search for suggestions based on the term, then add suggestions to options
         for (String term : terms) {
             List<String> options = new ArrayList<>();
@@ -434,7 +433,7 @@ public class StarWarsTester {
                 if (suggestions != null && suggestions.length > 0) {
                     Collections.addAll(options, suggestions);
                 } else {
-                    options.add(term); // fallback to original token when there are no good suggestions
+                    options.add(term); // fallback to the original token when there are no good suggestions
                 }
             }
             perTermOptions.add(options);
@@ -478,7 +477,7 @@ public class StarWarsTester {
         return out;
     }
 
-    // Checks whether a multi-term joined phrase exists in index dictionary, if so, add suggestions based on phrase
+    // Checks whether a multi-term joined phrase exists in the index dictionary, if so, add suggestions based on the phrase
     private void checkCombinedPhrase(String phrase, SpellChecker spellChecker, int perTerm, List<String> combined, String joined) throws IOException {
         if (!joined.equalsIgnoreCase(phrase)) {
             if (spellChecker.exist(joined)) {
