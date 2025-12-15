@@ -11,7 +11,6 @@ import org.apache.lucene.sandbox.search.PhraseWildcardQuery;
 import org.apache.lucene.search.*;
 import org.apache.lucene.store.FSDirectory;
 import org.jspecify.annotations.NullMarked;
-import org.jspecify.annotations.Nullable;
 
 import java.io.Closeable;
 import java.io.IOException;
