@@ -11,12 +11,16 @@ import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.io.File;
 import java.io.FileFilter;
 import java.io.FileReader;
 import java.io.IOException;
 import java.nio.file.Paths;
+
+
 
 /**
  * Creates a Lucene index from JSON files.
@@ -25,15 +29,9 @@ import java.nio.file.Paths;
  * with fields inferred from value types. Universal metadata (file name, path, bookmark tag) is
  * added to every Lucene document.
  */
+@NullMarked
 public class Indexer {
     private final IndexWriter writer;
-
-    /** Per-file parsing context holder to avoid mutable instance state, specifically for bookmarkTag
-     *  since it occurs once per file but we add to every corresponding Lucene doc created per text field */
-    private static final class ParseContext {
-        final String bookmarkTag;
-        ParseContext(String bookmarkTag) { this.bookmarkTag = bookmarkTag != null ? bookmarkTag : ""; }
-    }
 
     /**
      * Opens/creates an index at the given directory using the provided analyzer
@@ -49,6 +47,7 @@ public class Indexer {
         IndexWriterConfig config = new IndexWriterConfig(analyzer);
         writer = new IndexWriter(indexDirectory, config);
     }
+
     /** Closes the underlying {@link IndexWriter}. */
     public void close() throws IOException {
         writer.close();
@@ -91,7 +90,7 @@ public class Indexer {
         JSONParser  parser = new JSONParser();
         Object root = parser.parse(new FileReader(file.getPath()));
 
-        // Determine bookmark tag once per file (root-level or first occurrence)
+        // Determine a bookmark tag once per file (root-level or first occurrence)
         String bookmark = findBookmarkTagFirst(root);
         ParseContext ctx = new ParseContext(bookmark); // use of ParseContext to avoid mutable bookmark state
 
@@ -103,7 +102,7 @@ public class Indexer {
         if (element instanceof JSONObject jsonObject) {
             parseJsonObject(jsonObject, file, ctx); // if it's a simple JSON object, create lucene doc and process fields here
         } else if (element instanceof JSONArray jsonArray) {
-            for (Object obj : jsonArray) { // if it's an array, recursive call to process each object in array
+            for (Object obj : jsonArray) { // if it's an array, recursive call to process each object in an array
                 parseJsonElement(obj, file, ctx);
             }
         }
@@ -112,19 +111,21 @@ public class Indexer {
     /**
      * Converts a single JSON object into a Lucene document, adding fields based on value types.
      */
+    @NullMarked
     private void parseJsonObject(JSONObject jsonObject, File file, ParseContext ctx) throws IOException, ParseException {
         // Create a new document and add universal fields first
         Document d = createLuceneDocument(file);
 
-        // Add bookmark tag exactly once per document using the file-scoped context
-        d.add(new StringField(LuceneConstants.BOOKMARK_TAG, ctx.bookmarkTag, Field.Store.YES));
+        // Add a bookmark tag exactly once per document using the file-scoped context
+        String currentBookmark = ctx.bookmarkTag;
+        d.add(new StringField(LuceneConstants.BOOKMARK_TAG, currentBookmark, Field.Store.YES));
 
         for (Object key : jsonObject.keySet()) { // goes through every field in this object
             String fieldName = (String) key; // retrieve field name
             Object fieldValue = jsonObject.get(fieldName); // retrieve field value
 
-            // Create fields based on type and add to document
-            Class<?> fieldType = fieldValue != null ? fieldValue.getClass() : null;
+            // Create fields based on type and add to the document
+            Class<? extends @Nullable Object> fieldType = fieldValue != null ? fieldValue.getClass() : null;
             if (fieldType == String.class) {
                 if (fieldName.equals(LuceneConstants.CONTENTS)) {
                     d.add(new TextField(fieldName, (String) fieldValue, Field.Store.YES));
@@ -133,7 +134,7 @@ public class Indexer {
                 }
             }
             else if (fieldType == Long.class) {
-                // Index numeric value and also store it for retrieval
+                // Index a numeric value and also store it for retrieval
                 d.add(new LongPoint(fieldName, (Long) fieldValue));
                 d.add(new StoredField(fieldName, (Long) fieldValue));
             }
@@ -159,7 +160,7 @@ public class Indexer {
      * Creates a Lucene document with universal fields (file name and path).
      */
     private Document createLuceneDocument(File file) throws IOException {
-        // Note: kept minimal; additional metadata can be added by callers.
+        // Note: kept minimal; callers can add additional metadata.
         Document document = new Document();
         document.add(new StringField(LuceneConstants.FILE_NAME, file.getName(), Field.Store.YES));
         document.add(new StringField(LuceneConstants.FILE_PATH, file.getCanonicalPath(), Field.Store.YES));
@@ -177,17 +178,24 @@ public class Indexer {
             Object val = jsonObject.get(LuceneConstants.BOOKMARK_TAG);
             if (val instanceof String s) return s;
             for (Object k : jsonObject.keySet()) {
-                Object child = jsonObject.get((String) k);
+                Object child = jsonObject.get(k);
                 String found = findBookmarkTagFirst(child);
                 // should not take up too much time if bookmark_tag is defined @ the beginning of our JSON file
-                if (found != null && !found.isEmpty()) return found;
+                if (!found.isEmpty()) return found;
             }
         } else if (node instanceof JSONArray arr) {
             for (Object child : arr) {
                 String found = findBookmarkTagFirst(child);
-                if (found != null && !found.isEmpty()) return found;
+                if (!found.isEmpty()) return found;
             }
         }
         return ""; // Fallback when not present
+    }
+
+    /**
+     * Per-file parsing context holder to avoid mutable instance state, specifically for bookmarkTag
+     * since it occurs once per file, but we add to every corresponding Lucene doc created per text field
+     */
+    private record ParseContext(String bookmarkTag) {
     }
 }

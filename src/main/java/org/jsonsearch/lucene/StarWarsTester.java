@@ -11,6 +11,8 @@ import org.apache.lucene.search.spell.SpellChecker;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.json.simple.parser.ParseException;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.file.Paths;
@@ -24,11 +26,12 @@ import static org.jsonsearch.lucene.Searcher.printSeparator;
  * Perform {@link StarWarsTester#exactWordSearch(String)} and {@link StarWarsTester#phoneticSearch(String)} using
  * {@link Searcher#createBooleanQuery(String, boolean)}
  */
+@NullMarked
 public class StarWarsTester {
-    String indexPhoneticDir = "target/index/indexPhonetic"; // default moved under target/
-    String indexExactWordDir = "target/index/indexExactWord"; // default moved under target/
-    String dataDir = "src/main/resources"; //default JSON files location
-    Indexer indexer; // mainly used for dictionary index
+    private String indexPhoneticDir = LuceneConstants.DEFAULT_PHONETIC_INDEX; // default moved under target/
+    private String indexExactWordDir = LuceneConstants.DEFAULT_EXACT_INDEX; // default moved under target/
+    private String dataDir = LuceneConstants.DEFAULT_DATA; //default JSON files location
+    @Nullable Indexer indexer; // mainly used for dictionary index
 
     // Runtime-tunable boosts with defaults from constants (influence search results ranking)
     private float boostExact = LuceneConstants.BOOST_EXACT;
@@ -40,9 +43,9 @@ public class StarWarsTester {
     private int totalHits = 0; // records total # search results
     private int maxSearch = LuceneConstants.MAX_SEARCH; // max # results to retrieve
     private int phraseSlop = LuceneConstants.PHRASE_QUERY_SLOP;
-    private int minShouldMatch = 1; // min # SHOULD clauses to match in boolean query
+    private int minShouldMatch = 1; // min # SHOULD clauses to match in a boolean query
     private int fuzzyEdits = 2; //Levenshtein distance for fuzzy queries
-    private int minOccur = LuceneConstants.MIN_OCCUR; // min total hits threshold used by CLI to decide whether results significant
+    private int minOccur = LuceneConstants.MIN_OCCUR; // min total hits the threshold used by CLI to decide whether results significant
 
     // Spellchecker runtime controls
     private boolean rebuildSpellIndex = false; // force rebuild dictionary index on startup
@@ -55,11 +58,12 @@ public class StarWarsTester {
      * Results displayed 1. exact and phonetic results and 2. suggestion search results if entered phrase !found
      * Behind the scene:
      * 1. Build indexes with user entered dir paths
-     * 2. Generate spell suggestions over exact index's directory
+     * 2. Generate spell suggestions over the exact index's directory
      * 3. Results are merged and ranked into final bookmark tags with scores
      * 4. Scores are boosted when searcher is called into building queries
      * */
-    public static void main(String[] args) throws IOException, ParseException {
+    static void main(String[] args) throws IOException, ParseException {
+        System.out.println("Running with Java Version: " + System.getProperty("java.version"));
         StarWarsTester tester = new StarWarsTester();
 
         // Parse CLI flags for boosts and query params
@@ -90,13 +94,14 @@ public class StarWarsTester {
                 parseInt(arg.substring("--maxSuggestionCombos=".length()), "MAX_SUGGESTION_COMBOS", v -> tester.maxSuggestionCombos = v, 1, 100);
             }
         }
-        System.out.println(String.format(
-                "Active boosts -> exact: %.3f, phonetic: %.3f, wildcard: %.3f, fuzzy: %.3f\n" +
-                "Query params -> maxSearch: %d, slop: %d, minShouldMatch: %d, fuzzyEdits: %d, minOccur: %d\n" +
-                "Spellchecker -> rebuild: %s, perTerm: %d, maxCombos: %d",
+        System.out.printf(
+                """
+                        Active boosts -> exact: %.3f, phonetic: %.3f, wildcard: %.3f, fuzzy: %.3f
+                        Query params -> maxSearch: %d, slop: %d, minShouldMatch: %d, fuzzyEdits: %d, minOccur: %d
+                        Spellchecker -> rebuild: %s, perTerm: %d, maxCombos: %d%n""",
                 tester.boostExact, tester.boostPhonetic, tester.boostWildcard, tester.boostFuzzy,
                 tester.maxSearch, tester.phraseSlop, tester.minShouldMatch, tester.fuzzyEdits, tester.minOccur,
-                Boolean.toString(tester.rebuildSpellIndex), tester.spellSuggestionsPerTerm, tester.maxSuggestionCombos));
+                tester.rebuildSpellIndex, tester.spellSuggestionsPerTerm, tester.maxSuggestionCombos);
 
 
         // CLI: Scanner for user input
@@ -106,7 +111,7 @@ public class StarWarsTester {
         System.out.println("Would you like to index search files? (y/n)");
         if (sc.nextLine().trim().equalsIgnoreCase("y")) {
 
-            // Ask user to define which files to look for
+            // Ask the user to define which files to look for
             System.out.println("Please enter filepath for search files ('Enter' default= \"src/main/resources\")");
             String dataPath = sc.nextLine().trim();
             if (!dataPath.isEmpty()){
@@ -116,7 +121,7 @@ public class StarWarsTester {
                 tester.setDataDir(tester.dataDir);
             }
 
-            // Ask user to define where to store exact content index for query purposes
+            // Ask the user to define where to store the exact content index for query purposes
             System.out.println("Please enter filepath to store exact match index: ('Enter' default= \"target/index/indexExactWord\")");
             String indexExactPath = sc.nextLine().trim();
             if (!indexExactPath.isEmpty()){
@@ -126,7 +131,7 @@ public class StarWarsTester {
                 tester.setExactWordIndexDir(tester.indexExactWordDir);
             }
 
-            // Ask user to define where to store phonetic index for query purposes
+            // Ask the user to define where to store phonetic index for query purposes
             System.out.println("Please enter filepath to store phonetic index: ('Enter' default= \"target/index/indexPhonetic\")");
             String indexPhoneticPath = sc.nextLine().trim();
             if (!indexPhoneticPath.isEmpty()){
@@ -149,7 +154,7 @@ public class StarWarsTester {
         // Spellchecker: create and use in try-with-resources to avoid leaks
         try (Directory spellIndexDir = FSDirectory.open(Paths.get("target/index/dictionaryIndex"));
 
-             // Access exact phrase index and produce a dictionary index based on our files indexed
+             // Access the exact phrase index and produce a dictionary index based on our files indexed
              Directory mainIndexDir = FSDirectory.open(Paths.get(tester.getExactIndexDir()));
              IndexReader indexReader = DirectoryReader.open(mainIndexDir);
              StandardAnalyzer standardAnalyzer = new StandardAnalyzer()) {
@@ -160,7 +165,7 @@ public class StarWarsTester {
             // Build per-term suggestions and combine into phrases
             List<String> suggestions = tester.buildPerTermSuggestions(phrase, spellChecker, standardAnalyzer, tester.spellSuggestionsPerTerm, tester.maxSuggestionCombos);
             
-            // Results for exact search phrase
+            // Results for the exact search phrase
             SearchOutcome exactOutcome = tester.exactWordSearch(phrase);
             tester.merge(finalResults, exactOutcome.bookmarksByTag);
             System.out.print(exactOutcome.totalHits + " exact matches found ");
@@ -171,7 +176,7 @@ public class StarWarsTester {
 
             printSeparator('=', 75);
 
-            // Results for phonetically similar phrase
+            // Results for a phonetically similar phrase
             System.out.println("Searching for similar phonetics...");
             SearchOutcome phoneticOutcome = tester.phoneticSearch(phrase);
             tester.merge(finalResults, phoneticOutcome.bookmarksByTag);
@@ -180,8 +185,8 @@ public class StarWarsTester {
             tester.totalHits += phoneticOutcome.totalHits;
             printSeparator('=', 75);
 
-            // Give suggestions when search phrase is not found, or when < min occur, suggest alternatives
-            if ((suggestions != null && !suggestions.isEmpty()) && tester.totalHits < LuceneConstants.MIN_OCCUR) {
+            // Give suggestions when a search phrase is not found, or when < min occurs, suggest alternatives
+            if ( !suggestions.isEmpty() && tester.totalHits < LuceneConstants.MIN_OCCUR) {
                 System.out.println("Here are some suggestion searches:");
                 for (String current_suggestion : suggestions) {
                     System.out.print("Suggestion results for \"" + current_suggestion + "\": ");
@@ -266,8 +271,8 @@ public class StarWarsTester {
     }
 
 
-    /** Creates query based on exact phrase; returns found bookmark tags and total scores per tag */
-    public SearchOutcome exactWordSearch(String phrase) throws IOException {
+    /** Creates a query based on the exact phrase; returns found bookmark tags and total scores per tag */
+    private SearchOutcome exactWordSearch(String phrase) throws IOException {
         long startTime = System.currentTimeMillis();
         LinkedHashMap<String, Double> result;
         int total;
@@ -286,7 +291,7 @@ public class StarWarsTester {
     }
 
     /** Creates a query based on phonetics of a phrase; returns a map of found bookmark tags and total scores per tag */
-    public SearchOutcome phoneticSearch(String phrase) throws IOException {
+    private SearchOutcome phoneticSearch(String phrase) throws IOException {
         long startTime = System.currentTimeMillis();
         LinkedHashMap<String, Double> result;
         int total;
@@ -319,10 +324,10 @@ public class StarWarsTester {
         }
     }
 
-    // Sorts bookmark tags from highest score to lowest
+    // Sorts bookmark tags from the highest score to the lowest
     private Map<String, Double> sortByValue(LinkedHashMap<String, Double> map) {
         List<Map.Entry<String, Double>> entries =
-                new ArrayList<Map.Entry<String, Double>>(map.entrySet());
+                new ArrayList<>(map.entrySet());
         entries.sort((a, b) -> b.getValue().compareTo(a.getValue()));
         Map<String, Double> sortedMap = new LinkedHashMap<>();
         for (Map.Entry<String, Double> entry : entries) {
@@ -353,7 +358,7 @@ public class StarWarsTester {
         }
     }
 
-    // Build or reuse spell index: rebuild if flag is true or index does not exist/has no docs
+    // Helper: build or reuse spell index: rebuild if a flag is true or the index does not exist/has no docs
     private static void ensureSpellIndex(SpellChecker spellChecker,
                                          Directory spellIndexDir,
                                          IndexReader mainIndexReader,
@@ -361,7 +366,7 @@ public class StarWarsTester {
                                          boolean rebuild) throws IOException {
         boolean hasSpellIndex = DirectoryReader.indexExists(spellIndexDir);
         boolean shouldBuild = rebuild || !hasSpellIndex;
-        if (!shouldBuild && hasSpellIndex) {
+        if (!shouldBuild) {
             try (DirectoryReader r = DirectoryReader.open(spellIndexDir)) {
                 shouldBuild = r.numDocs() == 0;
             }
@@ -371,7 +376,7 @@ public class StarWarsTester {
         }
     }
 
-    // Tokenize a phrase into terms using the provided analyzer
+    // Helper: tokenize a phrase into terms using the provided analyzer
     private static List<String> tokenize(String text, StandardAnalyzer analyzer) throws IOException {
         List<String> tokens = new ArrayList<>();
         try (TokenStream ts = analyzer.tokenStream(LuceneConstants.CONTENTS, text)) {
@@ -384,7 +389,29 @@ public class StarWarsTester {
         return tokens;
     }
 
-    // Build per-term suggestions and combine to phrases with a cap on combinations
+    /**
+     * Builds per-term suggestions and combine to phrases with a cap on combinations
+     *
+     * <p>
+     *     This private method does several things:<br>
+     *     1. Tokenizes search phrase into term tokens <br>
+     *     2. Use a spell-checker to check whether a term token exists in the current dictionary index<br>
+     *      - If a term token exists in the dictionary index, add per term suggestions<br>
+     *      - If a term token does not exist but has suggestions based on the dictionary index, add those.<br>
+     *     3. Add combined phrase suggestions based on term tokens
+     *     4. Consider joined terms with no space and hyphenated terms with "-"
+     *     5. Filter suggestions to be unique, without original phrase, and with a cap of {@link StarWarsTester#maxSuggestionCombos}
+     *
+     *
+     * </p>
+     *
+     * @param phrase The search phrase that could be multi-term
+     * @param spellChecker Performs spell-checking in a dictionary index
+     * @param analyzer A StandardAnalyzer is used to tokenize phrase into terms
+     * @param perTerm The number of spell suggestions to produce per term (default 2)
+     * @param maxCombos The maximum # of combos from combining terms (default 5)
+     * @return a list of suggestions based on per-term analysis
+     */
     private List<String> buildPerTermSuggestions(String phrase,
                                                  SpellChecker spellChecker,
                                                  StandardAnalyzer analyzer,
@@ -394,22 +421,25 @@ public class StarWarsTester {
         if (terms.isEmpty()) return Collections.emptyList();
 
         List<List<String>> perTermOptions = new ArrayList<>();
+        // Goes through all term tokens in a search phrase, add to options to consider if
+        //  a term exists in spell-index dictionary;
+        // Else, search for suggestions based on the term, then add suggestions to options
         for (String term : terms) {
             List<String> options = new ArrayList<>();
             if (spellChecker.exist(term)) {
                 options.add(term);
             } else {
-                String[] sugg = spellChecker.suggestSimilar(term, perTerm);
-                if (sugg != null && sugg.length > 0) {
-                    for (String s : sugg) options.add(s);
+                String[] suggestions = spellChecker.suggestSimilar(term, perTerm);
+                if (suggestions != null && suggestions.length > 0) {
+                    Collections.addAll(options, suggestions);
                 } else {
-                    options.add(term); // fallback to original token
+                    options.add(term); // fallback to the original token when there are no good suggestions
                 }
             }
             perTermOptions.add(options);
         }
 
-        // Combine options with a cap
+        // Add simple combined phrase options based on per term options, with a maxCombo cap = 5 (default)
         List<String> combined = new ArrayList<>();
         combined.add("");
         for (List<String> opts : perTermOptions) {
@@ -426,40 +456,20 @@ public class StarWarsTester {
             if (combined.isEmpty()) break;
         }
 
-        // Heuristic: also consider concatenated and hyphenated forms like "hyperspace" and "hyper-space"
-        // These are common corrections when the original input had a space.
+        // Further, consider concatenated and hyphenated forms like "hyperspace" and "hyper-space"
+        // p.s. These are common corrections when the original input had a space.
         String joined = String.join("", terms);
         String hyphenated = String.join("-", terms);
+
         // Add direct exists or top suggestions for these forms
-        if (!joined.equalsIgnoreCase(phrase)) {
-            if (spellChecker.exist(joined)) {
-                combined.add(joined);
-            } else {
-                String[] sugg = spellChecker.suggestSimilar(joined, perTerm);
-                if (sugg != null) {
-                    for (String s : sugg) {
-                        combined.add(s);
-                    }
-                }
-            }
-        }
-        if (!hyphenated.equalsIgnoreCase(phrase)) {
-            if (spellChecker.exist(hyphenated)) {
-                combined.add(hyphenated);
-            } else {
-                String[] sugg = spellChecker.suggestSimilar(hyphenated, perTerm);
-                if (sugg != null) {
-                    for (String s : sugg) {
-                        combined.add(s);
-                    }
-                }
-            }
-        }
+        checkCombinedPhrase(phrase, spellChecker, perTerm, combined, joined); //"hyperspace"
+        checkCombinedPhrase(phrase, spellChecker, perTerm, combined, hyphenated); //"hyper-space"
 
         // Deduplicate and remove the original phrase if present, but keep order
         LinkedHashSet<String> uniq = new LinkedHashSet<>(combined);
         uniq.remove(phrase);
-        // Respect maxCombos cap on the final list as well
+
+        // Respect maxCombos cap = 5 (default) on the final list as well
         List<String> out = new ArrayList<>(uniq);
         if (out.size() > maxCombos) {
             return out.subList(0, maxCombos);
@@ -467,14 +477,25 @@ public class StarWarsTester {
         return out;
     }
 
-    // Simple value object to return search results
-    private static class SearchOutcome {
-        final LinkedHashMap<String, Double> bookmarksByTag;
-        final int totalHits;
-
-        SearchOutcome(LinkedHashMap<String, Double> bookmarksByTag, int totalHits) {
-            this.bookmarksByTag = bookmarksByTag != null ? bookmarksByTag : new LinkedHashMap<>();
-            this.totalHits = totalHits;
+    // Checks whether a multi-term joined phrase exists in the index dictionary, if so, add suggestions based on the phrase
+    private void checkCombinedPhrase(String phrase, SpellChecker spellChecker, int perTerm, List<String> combined, String joined) throws IOException {
+        if (!joined.equalsIgnoreCase(phrase)) {
+            if (spellChecker.exist(joined)) {
+                combined.add(joined);
+            } else {
+                String[] combinedPhraseSuggestions = spellChecker.suggestSimilar(joined, perTerm);
+                if (combinedPhraseSuggestions != null) {
+                    Collections.addAll(combined, combinedPhraseSuggestions);
+                }
+            }
         }
+    }
+
+    /** This is a simple value object to return search results
+     *
+     * @param bookmarksByTag The list of bookmark tags and their scores ranked high to low
+     * @param totalHits The total number of search hits
+     */
+        private record SearchOutcome(LinkedHashMap<String, Double> bookmarksByTag, int totalHits) {
     }
 }

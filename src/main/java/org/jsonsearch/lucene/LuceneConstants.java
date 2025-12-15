@@ -15,8 +15,17 @@ public class LuceneConstants {
     public static final String BOOKMARK_TAG = "bookmark_tag";
     /** Optional start time (or offset) field for result snippets. */
     public static final String START = "start";
-    /** Optional end time (or offset) field for result snippets. */
+    /** Optional end-time (or offset) field for result snippets. */
     public static final String END = "end";
+
+    /** Default directory path for speech sound (phonetic) index */
+    public static final String DEFAULT_PHONETIC_INDEX = "target/index/indexPhonetic";
+    /** Default directory path for the exact phrase index */
+    public static final String DEFAULT_EXACT_INDEX = "target/index/indexExactWord";
+    /** Default directory path that stores our JSON files to index */
+    public static final String DEFAULT_DATA = "src/main/resources";
+
+
     /** Default maximum number of search hits to return. This can affect scoring/boosts. */
     public static final int MAX_SEARCH = 10;
     /** Minimum total occurrences across results required to consider results significant.
