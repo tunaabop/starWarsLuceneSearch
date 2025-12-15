@@ -10,6 +10,8 @@ import org.apache.lucene.index.Term;
 import org.apache.lucene.sandbox.search.PhraseWildcardQuery;
 import org.apache.lucene.search.*;
 import org.apache.lucene.store.FSDirectory;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -24,6 +26,7 @@ import java.util.List;
  * for building exact, phonetic, wildcard, and fuzzy queries, and for aggregating
  * results by bookmark tag.
  */
+@NullMarked
 public class Searcher implements Closeable {
     private final IndexSearcher indexSearcher;
     private final DirectoryReader reader;

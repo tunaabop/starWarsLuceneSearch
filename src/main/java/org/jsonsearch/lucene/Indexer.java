@@ -11,12 +11,16 @@ import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.io.File;
 import java.io.FileFilter;
 import java.io.FileReader;
 import java.io.IOException;
 import java.nio.file.Paths;
+
+
 
 /**
  * Creates a Lucene index from JSON files.
@@ -25,6 +29,7 @@ import java.nio.file.Paths;
  * with fields inferred from value types. Universal metadata (file name, path, bookmark tag) is
  * added to every Lucene document.
  */
+@NullMarked
 public class Indexer {
     private final IndexWriter writer;
 
@@ -32,7 +37,7 @@ public class Indexer {
      *  since it occurs once per file but we add to every corresponding Lucene doc created per text field */
     private static final class ParseContext {
         final String bookmarkTag;
-        ParseContext(String bookmarkTag) { this.bookmarkTag = bookmarkTag != null ? bookmarkTag : ""; }
+        ParseContext(String bookmarkTag) { this.bookmarkTag = bookmarkTag; }
     }
 
     /**
@@ -112,19 +117,21 @@ public class Indexer {
     /**
      * Converts a single JSON object into a Lucene document, adding fields based on value types.
      */
+    @NullMarked
     private void parseJsonObject(JSONObject jsonObject, File file, ParseContext ctx) throws IOException, ParseException {
         // Create a new document and add universal fields first
         Document d = createLuceneDocument(file);
 
         // Add bookmark tag exactly once per document using the file-scoped context
-        d.add(new StringField(LuceneConstants.BOOKMARK_TAG, ctx.bookmarkTag, Field.Store.YES));
+        String currentBookmark = ctx.bookmarkTag;
+        d.add(new StringField(LuceneConstants.BOOKMARK_TAG, currentBookmark, Field.Store.YES));
 
         for (Object key : jsonObject.keySet()) { // goes through every field in this object
             String fieldName = (String) key; // retrieve field name
             Object fieldValue = jsonObject.get(fieldName); // retrieve field value
 
             // Create fields based on type and add to document
-            Class<?> fieldType = fieldValue != null ? fieldValue.getClass() : null;
+            Class<? extends @Nullable Object> fieldType = fieldValue != null ? fieldValue.getClass() : null;
             if (fieldType == String.class) {
                 if (fieldName.equals(LuceneConstants.CONTENTS)) {
                     d.add(new TextField(fieldName, (String) fieldValue, Field.Store.YES));
@@ -177,15 +184,15 @@ public class Indexer {
             Object val = jsonObject.get(LuceneConstants.BOOKMARK_TAG);
             if (val instanceof String s) return s;
             for (Object k : jsonObject.keySet()) {
-                Object child = jsonObject.get((String) k);
+                Object child = jsonObject.get(k);
                 String found = findBookmarkTagFirst(child);
                 // should not take up too much time if bookmark_tag is defined @ the beginning of our JSON file
-                if (found != null && !found.isEmpty()) return found;
+                if (!found.isEmpty()) return found;
             }
         } else if (node instanceof JSONArray arr) {
             for (Object child : arr) {
                 String found = findBookmarkTagFirst(child);
-                if (found != null && !found.isEmpty()) return found;
+                if (!found.isEmpty()) return found;
             }
         }
         return ""; // Fallback when not present
