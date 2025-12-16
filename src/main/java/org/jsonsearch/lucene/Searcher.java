@@ -30,7 +30,7 @@ public class Searcher implements Closeable {
     private final IndexSearcher indexSearcher;
     private final DirectoryReader reader;
 
-    // Tunable boosts (default from LuceneConstants)
+    // There are 4 tunable boosts - can be adjusted to affect scoring and ranking results
     private float boostExact = LuceneConstants.BOOST_EXACT;
     private float boostPhonetic = LuceneConstants.BOOST_PHONETIC;
     private float boostWildcard = LuceneConstants.BOOST_WILDCARD;
@@ -40,14 +40,14 @@ public class Searcher implements Closeable {
     private int maxSearch = LuceneConstants.MAX_SEARCH;
     private int phraseSlop = LuceneConstants.PHRASE_QUERY_SLOP;
 
-    // Used for boolean query search, # SHOULD clauses needed to match
-    private int minShouldMatch = 1;
-    // used for fuzzy query search, # edits allowed for fuzzy phrase results
-    private int fuzzyEdits = 2;
+    // Used for BOOLEAN query search, # SHOULD clauses needed to match
+    private int minShouldMatch = LuceneConstants.MIN_SHOULD_MATCH;
+    // used for FUZZY query search, # edits allowed for fuzzy phrase results
+    private int fuzzyEdits = LuceneConstants.FUZZY_EDITS;
 
-    // Whether a phrase is fuzzy
+    // Whether a phrase is FUZZY
     private boolean isFuzzy = false;
-    // Whether a phrase is a wildcard
+    // Whether a phrase is a WILDCARD
     private boolean isWildcard = false;
 
     /** Constructor of a Searcher

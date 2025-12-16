@@ -15,7 +15,6 @@ import org.apache.lucene.analysis.standard.StandardTokenizer;
  * Usage in {@link StarWarsTester} to create phonetic index and in {@link Searcher} to create a phonetic phrase query
  */
 public class MyPhoneticAnalyzer extends Analyzer {
-
     /**
      * Builds the tokenizer and token stream chain.
      *

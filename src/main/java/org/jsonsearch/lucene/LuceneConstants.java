@@ -34,6 +34,11 @@ public class LuceneConstants {
     /** Allowed phrase slop for phrase queries. This can affect scoring/boosts.  */
     public static final int PHRASE_QUERY_SLOP = 2;
 
+    /** Minimum number of SHOULD clauses to match when creating the boolean query */
+    public static final int MIN_SHOULD_MATCH = 1;
+    /** The maximum number of fuzzy edits allowed for a phrase to be considered in fuzzy query results */
+    public static final int FUZZY_EDITS = 2;
+
     /** Boost weight for exact phrase matches. */
     public static final float BOOST_EXACT = 2.0f;
     /** Boost weight for phonetic matches. */
