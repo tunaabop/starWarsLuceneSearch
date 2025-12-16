@@ -4,10 +4,9 @@ import java.io.File;
 import java.io.FileFilter;
 
 /**
- * File filter that accepts only JSON files.
+ * This is a File filter that accepts only JSON files.
  * <p>
- * This filter performs a case-insensitive check for the 
- * file name to end with the extension {@code .json}.
+ * Performs a case-insensitive check for the file name to end with the extension {@code .json}.
  */
 public class JsonFileFilter implements FileFilter {
     /**

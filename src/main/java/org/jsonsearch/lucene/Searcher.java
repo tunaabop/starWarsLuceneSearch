@@ -149,39 +149,38 @@ public class Searcher implements Closeable {
      * Builds a combined boolean query using the provided phrase.
      * <p>
      * Depending on flags and symbols contained in the input phrase, this will combine:
-     * exact or phonetic phrase, optional concatenated/hyphenated variants, fuzzy terms (when '~' is used),
-     * and wildcard/prefix clauses (when '*' or '?' are present).
+     * 1. exact or phonetic phrase, <br>
+     * 2. fuzzy terms (when '~' is used), <br>
+     * 3. wildcard/prefix clauses (when '*' or '?' are present), and <br>
+     * 4. optional concatenated/hyphenated variants.
+     *
      *
      * @param phrase            user input phrase
      * @param isPhoneticSearch  if true, build a phonetic phrase; otherwise an exact phrase
      * @return a composed {@link BooleanQuery}
+     * @throws IOException if the analyzer is not created properly
      */
     public BooleanQuery createBooleanQuery(String phrase, boolean isPhoneticSearch) throws IOException {
 
         // Builder, to build a boolean query, we can add various query clauses to this builder
         BooleanQuery.Builder booleanQueryBuilder = new BooleanQuery.Builder();
 
-        // Tokenize using StandardAnalyzer for helper clauses (concatenated/hyphenated variants, prefix extras)
-        List<String> tokens = analyzeWithStandard(phrase);
 
-        // If multi-token input like "hyper space", add concatenated and hyphenated single-term queries
-        float boostPrefix = LuceneConstants.BOOST_PREFIX;
-        if (tokens.size() >= 2 && !isPhoneticSearch) {
-            StringBuilder sb = new StringBuilder();
-            for (String t : tokens) sb.append(t);
-            String concatenated = sb.toString();
-            if (!concatenated.isEmpty()) {
-                Query concatQ = createBoostQuery(new TermQuery(new Term(LuceneConstants.CONTENTS, concatenated)), boostPrefix);
-                booleanQueryBuilder.add(concatQ, BooleanClause.Occur.SHOULD);
-            }
-            String hyphenated = String.join("-", tokens);
-            if (!hyphenated.isEmpty()) {
-                Query hyphenQ = createBoostQuery(new TermQuery(new Term(LuceneConstants.CONTENTS, hyphenated)), boostPrefix);
-                booleanQueryBuilder.add(hyphenQ, BooleanClause.Occur.SHOULD);
-            }
+        // 1. Create a simple phrase query, either exact or based on phonetics
+        Query phraseQuery;
+
+            // Creating an exact phrase query
+        if (!isPhoneticSearch) {
+            phraseQuery = createExactPhraseQuery(phrase);
+            booleanQueryBuilder.add(phraseQuery, BooleanClause.Occur.SHOULD);
+
+            // Creating a phonetic phrase query. If searching for fuzzy/wildcards, don't search phonetics
+        } else if(!isFuzzy() || !isWildcard()) {
+            phraseQuery = createPhoneticPhraseQuery(phrase);
+            booleanQueryBuilder.add(phraseQuery, BooleanClause.Occur.SHOULD);
         }
 
-        // check for fuzzy
+        // 2. Create fuzzy queries, where fuzzy phrases that have "~" somewhere in it
         if (phrase.contains("~")) {
             isFuzzy = true;
             if (!phrase.contains(" ")) { // single term
@@ -196,15 +195,21 @@ public class Searcher implements Closeable {
             }
         }
 
-        // check for wildcards
+        // 2. Create wildcard queries
+
+            // Tokenize the phrase using StandardAnalyzer for helper clauses (concatenated/hyphenated variants, prefix extras)
+        List<String> tokens = analyzeWithStandard(phrase);
+
+        float boostPrefix = LuceneConstants.BOOST_PREFIX;
+
+            // Wildcards have "*" or "?" in a phrase
         if(phrase.contains("*") || phrase.contains("?")) {
             isWildcard = true;
             Query wildcardPhraseQuery = createPhraseWildcardQuery(phrase);
             booleanQueryBuilder.add(wildcardPhraseQuery, BooleanClause.Occur.SHOULD);
 
-            // If single-token trailing-* like "hyper*", add an extra PrefixQuery with a higher boost
+            // For single-token trailing-* like "hyper*", use PrefixQuery with a higher boost
             if (tokens.size() == 1) {
-//                String tok = tokens.getFirst();
                 // Use the raw term from the input for '*' detection (not analyzed)
                 String raw = phrase.trim();
                 if (raw.endsWith("*") && !raw.contains("?") && raw.indexOf('*') == raw.length()-1) {
@@ -217,22 +222,29 @@ public class Searcher implements Closeable {
             }
         }
 
-        // Creating a simple phrase query, either exact or based on phonetics
-        Query phraseQuery;
+        // Check for multi-token input like "hyper space", add concatenated and hyphenated single-term queries
+        if (tokens.size() >= 2 && !isPhoneticSearch) {
+            StringBuilder sb = new StringBuilder();
+            for (String t : tokens) sb.append(t);
 
-        // Creating an exact phrase query
-        if (!isPhoneticSearch) {
-            phraseQuery = createExactPhraseQuery(phrase);
-            booleanQueryBuilder.add(phraseQuery, BooleanClause.Occur.SHOULD);
+            // Add a TermQuery to Boolean Query for each concatenated phrase
+            String concatenated = sb.toString();
+            if (!concatenated.isEmpty()) {
+                Query concatQ = createBoostQuery(new TermQuery(new Term(LuceneConstants.CONTENTS, concatenated)), boostPrefix);
+                booleanQueryBuilder.add(concatQ, BooleanClause.Occur.SHOULD);
+            }
 
-        // Creating a phonetic phrase query. If searching for fuzzy/wildcards, don't search phonetics
-        } else if(!isFuzzy() || !isWildcard()) {
-            phraseQuery = createPhoneticPhraseQuery(phrase);
-            booleanQueryBuilder.add(phraseQuery, BooleanClause.Occur.SHOULD);
+            // Add a TermQuery to Boolean Query for each hyphenated phrase
+            String hyphenated = String.join("-", tokens);
+            if (!hyphenated.isEmpty()) {
+                Query hyphenQ = createBoostQuery(new TermQuery(new Term(LuceneConstants.CONTENTS, hyphenated)), boostPrefix);
+                booleanQueryBuilder.add(hyphenQ, BooleanClause.Occur.SHOULD);
+            }
         }
 
+        // END OF ADDING QUERIES
+
         // Ensure at least one (minShouldWatch = 1) of the SHOULD clauses matches
-        // (configurable, can alter minShouldMatch to alter search precision)
         booleanQueryBuilder.setMinimumNumberShouldMatch(this.minShouldMatch);
 
         // Returns a BooleanQuery

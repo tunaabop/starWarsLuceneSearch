@@ -21,9 +21,9 @@ import java.util.*;
 import static org.jsonsearch.lucene.Searcher.printSeparator;
 
 /**
- * Perform demo phrase search on StarWars JSON files found in {@link StarWarsTester#dataDir}
- * Create exact index in {@link StarWarsTester#indexExactWordDir} and phonetic index in {@link StarWarsTester#indexPhoneticDir}
- * Perform {@link StarWarsTester#exactWordSearch(String)} and {@link StarWarsTester#phoneticSearch(String)} using
+ * Perform demo phrase search on StarWars JSON files found in {@link StarWarsTester#dataDir} <br>
+ * - Create exact index in {@link StarWarsTester#indexExactWordDir} and phonetic index in {@link StarWarsTester#indexPhoneticDir} <br>
+ * - Perform {@link StarWarsTester#exactWordSearch(String)} and {@link StarWarsTester#phoneticSearch(String)} using
  * {@link Searcher#createBooleanQuery(String, boolean)}
  */
 @NullMarked
@@ -53,13 +53,18 @@ public class StarWarsTester {
     private int maxSuggestionCombos = 5;       // cap on combined phrase suggestions
 
     /**
-     * CLI: At startup, check and parse CLI flags
-     * User is prompted 1. whether to build indexes (y/n) and 2. search phrase ("phrase")
-     * Results displayed 1. exact and phonetic results and 2. suggestion search results if entered phrase !found
-     * Behind the scene:
-     * 1. Build indexes with user entered dir paths
-     * 2. Generate spell suggestions over the exact index's directory
-     * 3. Results are merged and ranked into final bookmark tags with scores
+     * CLI: At startup, check and parse CLI flags <br>
+     * User is prompted <br>
+     * 1. whether to build indexes (y/n) and <br>
+     * 2. search phrase ("phrase") <br>
+     * Results displayed 1. exact and phonetic results and <br>
+     * 2. suggestion search results if the entered phrase is not found <br>
+     *
+     *
+     * Behind the scene: <br>
+     * 1. Build indexes with user entered dir paths <br>
+     * 2. Generate spell suggestions over the exact index's directory <br>
+     * 3. Results are merged and ranked into final bookmark tags with scores <br>
      * 4. Scores are boosted when searcher is called into building queries
      * */
     static void main(String[] args) throws IOException, ParseException {
@@ -107,38 +112,38 @@ public class StarWarsTester {
         // CLI: Scanner for user input
         Scanner sc = new Scanner(System.in);
 
-        // Indexing - optional based on whether it has been done already
+        // Indexing here
         System.out.println("Would you like to index search files? (y/n)");
         if (sc.nextLine().trim().equalsIgnoreCase("y")) {
 
-            // Ask the user to define which files to look for
+            // 1. Define which files to look for
             System.out.println("Please enter filepath for search files ('Enter' default= \"src/main/resources\")");
             String dataPath = sc.nextLine().trim();
             if (!dataPath.isEmpty()){
-                tester.setDataDir(dataPath);
+                tester.setDataDir(dataPath); //user input
             }
             else{
-                tester.setDataDir(tester.dataDir);
+                tester.setDataDir(tester.dataDir); //default
             }
 
-            // Ask the user to define where to store the exact content index for query purposes
+            // 2. Define where to store the exact content index for query purposes
             System.out.println("Please enter filepath to store exact match index: ('Enter' default= \"target/index/indexExactWord\")");
             String indexExactPath = sc.nextLine().trim();
             if (!indexExactPath.isEmpty()){
-                tester.setExactWordIndexDir(indexExactPath);
+                tester.setExactWordIndexDir(indexExactPath); //user input
             }
             else{
-                tester.setExactWordIndexDir(tester.indexExactWordDir);
+                tester.setExactWordIndexDir(tester.indexExactWordDir); //default
             }
 
-            // Ask the user to define where to store phonetic index for query purposes
+            // 3. Define where to store phonetic index for query purposes
             System.out.println("Please enter filepath to store phonetic index: ('Enter' default= \"target/index/indexPhonetic\")");
             String indexPhoneticPath = sc.nextLine().trim();
             if (!indexPhoneticPath.isEmpty()){
-                tester.setPhoneticIndexDir(indexPhoneticPath);
+                tester.setPhoneticIndexDir(indexPhoneticPath); //user input
             }
             else{
-                tester.setPhoneticIndexDir(tester.indexPhoneticDir);
+                tester.setPhoneticIndexDir(tester.indexPhoneticDir); //default
             }
 
             // Create indexes here
@@ -159,13 +164,8 @@ public class StarWarsTester {
              IndexReader indexReader = DirectoryReader.open(mainIndexDir);
              StandardAnalyzer standardAnalyzer = new StandardAnalyzer()) {
 
-            SpellChecker spellChecker = new SpellChecker(spellIndexDir);
-            // Reuse the spell index across runs; rebuild only if requested or missing
-            ensureSpellIndex(spellChecker, spellIndexDir, indexReader, standardAnalyzer, tester.rebuildSpellIndex);
-            // Build per-term suggestions and combine into phrases
-            List<String> suggestions = tester.buildPerTermSuggestions(phrase, spellChecker, standardAnalyzer, tester.spellSuggestionsPerTerm, tester.maxSuggestionCombos);
-            
-            // Results for the exact search phrase
+
+            // 1. Results for the exact search phrase
             SearchOutcome exactOutcome = tester.exactWordSearch(phrase);
             tester.merge(finalResults, exactOutcome.bookmarksByTag);
             System.out.print(exactOutcome.totalHits + " exact matches found ");
@@ -176,7 +176,7 @@ public class StarWarsTester {
 
             printSeparator('=', 75);
 
-            // Results for a phonetically similar phrase
+            // 2. Results for a phonetically similar phrase
             System.out.println("Searching for similar phonetics...");
             SearchOutcome phoneticOutcome = tester.phoneticSearch(phrase);
             tester.merge(finalResults, phoneticOutcome.bookmarksByTag);
@@ -185,21 +185,36 @@ public class StarWarsTester {
             tester.totalHits += phoneticOutcome.totalHits;
             printSeparator('=', 75);
 
+            // 3. Results for suggestions based on the search phrase (only if not found in the exact index)
+
+            SpellChecker spellChecker = new SpellChecker(spellIndexDir);
+            // Reuse the spell index across runs; rebuild only if requested or missing
+            ensureSpellIndex(spellChecker, spellIndexDir, indexReader, standardAnalyzer, tester.rebuildSpellIndex);
+
+            // Build per-term suggestions and combine into phrases
+            List<String> suggestions = tester.buildPerTermSuggestions(phrase, spellChecker, standardAnalyzer, tester.spellSuggestionsPerTerm, tester.maxSuggestionCombos);
+
             // Give suggestions when a search phrase is not found, or when < min occurs, suggest alternatives
             if ( !suggestions.isEmpty() && tester.totalHits < LuceneConstants.MIN_OCCUR) {
                 System.out.println("Here are some suggestion searches:");
                 for (String current_suggestion : suggestions) {
                     System.out.print("Suggestion results for \"" + current_suggestion + "\": ");
                     SearchOutcome suggestionOutcome = tester.exactWordSearch(current_suggestion);
+
+                    // merge suggestion results with other results
                     tester.merge(finalResults, suggestionOutcome.bookmarksByTag);
+                    tester.totalHits += suggestionOutcome.totalHits;
+
+                    // output suggestion results
                     System.out.print(suggestionOutcome.totalHits + " matches found ");
                     System.out.println("with bookmark tags: " + suggestionOutcome.bookmarksByTag);
-                    tester.totalHits += suggestionOutcome.totalHits;
+
                     printSeparator('-', 75);
                 }
             }
         }
 
+        // END OF LOOKING FOR RESULTS
 
         // Process results
         if(tester.totalHits > tester.minOccur) {
@@ -234,16 +249,25 @@ public class StarWarsTester {
         indexPhoneticDir = path;
     }
 
-    /** Calls Indexer to process JSON files content from indexDir into lucene index with phonetic filter in dataDir */
+    /**
+     * Calls Indexer to process JSON files content from dataDir into a lucene index in indexExactWordDir
+     * <p> Use Lucene's built-in {@code StandardAnalyzer} to create a simple exact index</p>
+     * @throws IOException for any errors using the analyzer to read the index
+     * @throws ParseException for any errors filtering JSON files
+     */
     public void createExactWordIndex() throws IOException, ParseException {
+        // A build-in StandardAnalyzer is used to create simple exact index
         try (StandardAnalyzer standardAnalyzer = new StandardAnalyzer()) {
             indexer = new Indexer(indexExactWordDir, standardAnalyzer);
 
             int numIndexed;
+
+            // record time used to index
             long startTime = System.currentTimeMillis();
             numIndexed = indexer.createIndex(dataDir, new JsonFileFilter());
             long endTime = System.currentTimeMillis();
 
+            // record # docs created while indexing
             System.out.println(numIndexed + " docs indexed");
             System.out.println("Indexing exact content took " + (endTime - startTime) + " ms");
             printSeparator('*', 75);
@@ -252,17 +276,23 @@ public class StarWarsTester {
         }
     }
 
-    /** Calls Indexer to process JSON files content from indexDir into lucene index with phonetic filter in dataDir */
+    /**
+     * Calls Indexer to process JSON files content from dataDir into a phonetic filter index in indexPhoneticDir
+     * <p> Use a custom {@link MyPhoneticAnalyzer} to create a phonetic sound-alike index</p>
+     * @throws IOException for any errors using the analyzer to read the index
+     * @throws ParseException for any errors filtering JSON files
+     */
     public void createPhoneticIndex() throws IOException, ParseException {
+        // A custom analyzer is used to create phonetic sound-alike phrase index
         try (MyPhoneticAnalyzer phoneticAnalyzer = new MyPhoneticAnalyzer()) {
             indexer = new Indexer(indexPhoneticDir, phoneticAnalyzer);
 
-            int numIndexed;
             long startTime = System.currentTimeMillis();
-            numIndexed = indexer.createIndex(dataDir, new JsonFileFilter());
-            long endTime = System.currentTimeMillis();
-
+            // record # docs created from indexing
+            int numIndexed = indexer.createIndex(dataDir, new JsonFileFilter());
             System.out.println(numIndexed + " docs indexed");
+            long endTime = System.currentTimeMillis();
+            // record time used to index
             System.out.println("Indexing phonetics took " + (endTime - startTime) + " ms");
             printSeparator('*', 75);
 
@@ -273,39 +303,57 @@ public class StarWarsTester {
 
     /** Creates a query based on the exact phrase; returns found bookmark tags and total scores per tag */
     private SearchOutcome exactWordSearch(String phrase) throws IOException {
+
         long startTime = System.currentTimeMillis();
-        LinkedHashMap<String, Double> result;
-        int total;
+
+        LinkedHashMap<String, Double> result; // result bookmark tag IDs and their scores, want to return this
+        int total; // total # hits, want to return this
+
         try (Searcher searcherExact = new Searcher(indexExactWordDir)) {
+            // set all params for query search, based on constants set prior
             searcherExact.setBoosts(boostExact, boostPhonetic, boostWildcard, boostFuzzy);
             searcherExact.setQueryParams(phraseSlop, minShouldMatch, fuzzyEdits);
-            Query query = searcherExact.createBooleanQuery(phrase, false); // here we can choose what type of Query to create
+
+            // create a boolean query for exact phrase search, not phonetic
+            Query query = searcherExact.createBooleanQuery(phrase, false);
+
+            // result hits are retrieved
             TopDocs hits = searcherExact.search(query, maxSearch);
             total = (int) hits.totalHits.value();
             result = searcherExact.getBookmarks(hits);
         }
-        long endTime = System.currentTimeMillis();
 
+        long endTime = System.currentTimeMillis(); // time is recorded
         System.out.println("Searching took " + (endTime - startTime) + " ms");
-        return new SearchOutcome(result, total);
+
+        return new SearchOutcome(result, total); // return a record
     }
 
     /** Creates a query based on phonetics of a phrase; returns a map of found bookmark tags and total scores per tag */
     private SearchOutcome phoneticSearch(String phrase) throws IOException {
         long startTime = System.currentTimeMillis();
-        LinkedHashMap<String, Double> result;
-        int total;
+
+        LinkedHashMap<String, Double> result; // result bookmark tags and their scores, want to return this
+        int total; // total # result hits, want to return this
+
         try (Searcher searcher = new Searcher(indexPhoneticDir)) {
+            // set all params for query search, based on constants set prior
             searcher.setBoosts(boostExact, boostPhonetic, boostWildcard, boostFuzzy);
             searcher.setQueryParams(phraseSlop, minShouldMatch, fuzzyEdits);
+
+            // create a boolean query for exact phrase search, not phonetic
             Query query = searcher.createBooleanQuery(phrase, true); // here we can choose what type of Query to create
+
+            // result hits are retrieved
             TopDocs hits = searcher.search(query, maxSearch);
             total = (int) hits.totalHits.value();
             result = searcher.getBookmarks(hits);
         }
-        long endTime = System.currentTimeMillis();
+
+        long endTime = System.currentTimeMillis(); // time is recorded
         System.out.println("Searching took " + (endTime - startTime) + " ms");
-        return new SearchOutcome(result, total);
+
+        return new SearchOutcome(result, total); //return a record
     }
 
 // Methods for map organization
