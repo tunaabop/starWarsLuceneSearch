@@ -21,13 +21,17 @@ import java.io.IOException;
 import java.nio.file.Paths;
 
 
-
 /**
- * Creates a Lucene index from JSON files.
+ * Main Indexer class that creates a Lucene index from JSON files.
  * <p>
- * Each JSON object encountered in the input JSON files is converted into a Lucene {@link Document}
- * with fields inferred from value types. Universal metadata (file name, path, bookmark tag) is
- * added to every Lucene document.
+ * Each JSON object encountered in JSON files is converted into a Lucene {@link Document}
+ * with fields inferred from value types. <br>
+ * Universal metadata (file name, path, bookmark tag) is added to every Lucene document. <br>
+ * <p>
+ *     Note: "@NullMarked" is used here and in {@link Searcher}, {@link StarWarsTester} to define
+ *     types within this class as non-null by default, therefore, require explicit use of "@Nullable" for potential nulls
+ * </p>
+ *
  */
 @NullMarked
 public class Indexer {
@@ -35,8 +39,8 @@ public class Indexer {
 
     /**
      * Opens/creates an index at the given directory using the provided analyzer
-     * (either StandardAnalyzer or MyPhoneticAnalyzer). Having the correct analyzer is required to
-     *  process text correctly.
+     * (either a Lucene StandardAnalyzer or a custom {@link MyPhoneticAnalyzer}).
+     * <p> - Having the correct analyzer is required to process text correctly. </p>
      *
      * @param indexDirectoryPath path to the index directory
      * @param analyzer analyzer used to process text
@@ -86,7 +90,8 @@ public class Indexer {
         parseJSONFile(file); // parsing JSON file here using JSON simple
     }
 
-    /** Parses a JSON file into objects and dispatches for indexing. This is done using json-simple */
+    /** Parses a JSON file into objects and dispatches for indexing.
+     * <p> This is done using the {@code json-simple} library </p>*/
     private void parseJSONFile(File file) throws IOException, ParseException {
         JSONParser  parser = new JSONParser();
         Object root = parser.parse(new FileReader(file.getPath()));
@@ -99,7 +104,9 @@ public class Indexer {
         parseJsonElement(root, file, ctx);
     }
 
-    /** Recursively parses the JSON tree and indexes each object encountered. */
+    /** Recursively parses the JSON tree and indexes each object encountered.
+     *  <p> Goes through each JSON element, parse accordingly based on whether it is {@code JSONObject}
+     *  or a {@code JSONArray}. </p>*/
     private void parseJsonElement(Object element, File file, ParseContext ctx) throws IOException, ParseException {
         if (element instanceof JSONObject jsonObject) {
             parseJsonObject(jsonObject, file, ctx); // if it's a simple JSON object, create lucene doc and process fields here
@@ -181,7 +188,7 @@ public class Indexer {
             for (Object k : jsonObject.keySet()) {
                 Object child = jsonObject.get(k);
                 String found = findBookmarkTagFirst(child);
-                // should not take up too much time if bookmark_tag is defined @ the beginning of our JSON file
+                // should not take long if bookmark_tag is defined @ the beginning of our JSON file
                 assert found != null;
                 if (!found.isEmpty()) return found;
             }
@@ -196,8 +203,9 @@ public class Indexer {
     }
 
     /**
-     * Per-file parsing context holder to avoid mutable instance state, specifically for bookmarkTag
-     * since it occurs once per file, but we add to every corresponding Lucene doc created per text field
+     * Per-file parsing context holder to avoid any mutable instance state
+     * <p> Note: we specifically for {@code bookmarkTag} since it occurs once per JSON file,
+     * but we add to every corresponding Lucene Document created per text field </p>
      */
     private record ParseContext(String bookmarkTag) {
     }
