@@ -25,7 +25,7 @@ import java.util.List;
  * for building exact, phonetic, wildcard, and fuzzy queries, and for aggregating
  * results by bookmark tag.
 
- <p> "@NullMarked" is used here and in {@link Indexer}, {@link StarWarsTester} to define
+ <p> Note: "@NullMarked" is used here and in {@link Indexer}, {@link StarWarsTester} to define
  types within this class as non-null by default, therefore, require explicit use of "@Nullable" for potential nulls
  </p>*/
 @NullMarked

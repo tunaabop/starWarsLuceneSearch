@@ -21,13 +21,17 @@ import java.io.IOException;
 import java.nio.file.Paths;
 
 
-
 /**
  * Main Indexer class that creates a Lucene index from JSON files.
  * <p>
  * Each JSON object encountered in JSON files is converted into a Lucene {@link Document}
  * with fields inferred from value types. <br>
- * Universal metadata (file name, path, bookmark tag) is added to every Lucene document.
+ * Universal metadata (file name, path, bookmark tag) is added to every Lucene document. <br>
+ * <p>
+ *     Note: "@NullMarked" is used here and in {@link Searcher}, {@link StarWarsTester} to define
+ *     types within this class as non-null by default, therefore, require explicit use of "@Nullable" for potential nulls
+ * </p>
+ *
  */
 @NullMarked
 public class Indexer {

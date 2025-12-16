@@ -21,10 +21,16 @@ import java.util.*;
 import static org.jsonsearch.lucene.Searcher.printSeparator;
 
 /**
- * Perform demo phrase search on StarWars JSON files found in {@link StarWarsTester#dataDir} <br>
+ * Perform a demo phrase search on StarWars JSON files found in {@link StarWarsTester#dataDir} <br>
+ * <p>
  * - Create exact index in {@link StarWarsTester#indexExactWordDir} and phonetic index in {@link StarWarsTester#indexPhoneticDir} <br>
  * - Perform {@link StarWarsTester#exactWordSearch(String)} and {@link StarWarsTester#phoneticSearch(String)} using
- * {@link Searcher#createBooleanQuery(String, boolean)}
+ * {@link Searcher#createBooleanQuery(String, boolean)} <br>
+ * </p>
+ *  <p>
+ *       Note: "@NullMarked" is used here and in {@link Indexer}, {@link Searcher} to define
+ *  *     types within this class as non-null by default, therefore, require explicit use of "@Nullable" for potential nulls
+ *  * </p>
  */
 @NullMarked
 public class StarWarsTester {
@@ -39,27 +45,33 @@ public class StarWarsTester {
     private float boostWildcard = LuceneConstants.BOOST_WILDCARD;
     private float boostFuzzy = LuceneConstants.BOOST_FUZZY;
 
-    // Query params
     private int totalHits = 0; // records total # search results
+    // Query params
     private int maxSearch = LuceneConstants.MAX_SEARCH; // max # results to retrieve
     private int phraseSlop = LuceneConstants.PHRASE_QUERY_SLOP;
-    private int minShouldMatch = 1; // min # SHOULD clauses to match in a boolean query
-    private int fuzzyEdits = 2; //Levenshtein distance for fuzzy queries
+    private int minShouldMatch = LuceneConstants.MIN_SHOULD_MATCH; // min # SHOULD clauses to match in a boolean query
+    private int fuzzyEdits = LuceneConstants.FUZZY_EDITS; //Levenshtein distance for fuzzy queries
     private int minOccur = LuceneConstants.MIN_OCCUR; // min total hits the threshold used by CLI to decide whether results significant
 
-    // Spellchecker runtime controls
+    // Spellchecker runtime controls/suggestion query vars that are only used in this demo class
     private boolean rebuildSpellIndex = false; // force rebuild dictionary index on startup
     private int spellSuggestionsPerTerm = 2;   // per-term Spellchecker suggestion count
     private int maxSuggestionCombos = 5;       // cap on combined phrase suggestions
 
     /**
-     * CLI: At startup, check and parse CLI flags <br>
-     * User is prompted <br>
-     * 1. whether to build indexes (y/n) and <br>
-     * 2. search phrase ("phrase") <br>
-     * Results displayed 1. exact and phonetic results and <br>
-     * 2. suggestion search results if the entered phrase is not found <br>
+     * CLI Program: <br>
+     * At startup, check and parse CLI flags <br>
+     * <p>
+     *     User is prompted <br>
+     *     1. whether to build indexes (y/n) and <br>
+     *     2. search phrase ("phrase") <br>
      *
+     * </p>
+     * <p>
+     *      Results displayed: <br>
+     *      1. exact and phonetic results and <br>
+     *      2. suggestion search results if the entered phrase is not found <br>
+     * </p>
      *
      * Behind the scene: <br>
      * 1. Build indexes with user entered dir paths <br>
@@ -446,8 +458,8 @@ public class StarWarsTester {
      *     2. Use a spell-checker to check whether a term token exists in the current dictionary index<br>
      *      - If a term token exists in the dictionary index, add per term suggestions<br>
      *      - If a term token does not exist but has suggestions based on the dictionary index, add those.<br>
-     *     3. Add combined phrase suggestions based on term tokens
-     *     4. Consider joined terms with no space and hyphenated terms with "-"
+     *     3. Add combined phrase suggestions based on term tokens <br>
+     *     4. Consider joined terms with no space and hyphenated terms with "-" <br>
      *     5. Filter suggestions to be unique, without original phrase, and with a cap of {@link StarWarsTester#maxSuggestionCombos}
      *
      *
