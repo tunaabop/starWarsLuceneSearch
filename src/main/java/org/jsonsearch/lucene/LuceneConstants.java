@@ -29,7 +29,8 @@ public class LuceneConstants {
     /** Default maximum number of search hits to return. This can affect scoring/boosts. */
     public static final int MAX_SEARCH = 10;
     /** Minimum total occurrences across results required to consider results significant.
-     * This can affect final search results */
+     * This can affect final search results
+     * <p> Used in demo class {@link StarWarsTester}, adjust if needed </p>*/
     public static final int MIN_OCCUR = 2;
     /** Allowed phrase slop for phrase queries. This can affect scoring/boosts.  */
     public static final int PHRASE_QUERY_SLOP = 2;

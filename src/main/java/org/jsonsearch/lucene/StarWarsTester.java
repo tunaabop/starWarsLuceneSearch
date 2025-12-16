@@ -278,9 +278,9 @@ public class StarWarsTester {
         int total;
         try (Searcher searcherExact = new Searcher(indexExactWordDir)) {
             searcherExact.setBoosts(boostExact, boostPhonetic, boostWildcard, boostFuzzy);
-            searcherExact.setQueryParams(maxSearch, phraseSlop, minShouldMatch, fuzzyEdits);
+            searcherExact.setQueryParams(phraseSlop, minShouldMatch, fuzzyEdits);
             Query query = searcherExact.createBooleanQuery(phrase, false); // here we can choose what type of Query to create
-            TopDocs hits = searcherExact.search(query);
+            TopDocs hits = searcherExact.search(query, maxSearch);
             total = (int) hits.totalHits.value();
             result = searcherExact.getBookmarks(hits);
         }
@@ -297,9 +297,9 @@ public class StarWarsTester {
         int total;
         try (Searcher searcher = new Searcher(indexPhoneticDir)) {
             searcher.setBoosts(boostExact, boostPhonetic, boostWildcard, boostFuzzy);
-            searcher.setQueryParams(maxSearch, phraseSlop, minShouldMatch, fuzzyEdits);
+            searcher.setQueryParams(phraseSlop, minShouldMatch, fuzzyEdits);
             Query query = searcher.createBooleanQuery(phrase, true); // here we can choose what type of Query to create
-            TopDocs hits = searcher.search(query);
+            TopDocs hits = searcher.search(query, maxSearch);
             total = (int) hits.totalHits.value();
             result = searcher.getBookmarks(hits);
         }

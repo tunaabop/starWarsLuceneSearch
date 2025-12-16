@@ -24,7 +24,10 @@ import java.util.List;
  * Wrapper around Lucene's {@link IndexSearcher} providing convenience methods
  * for building exact, phonetic, wildcard, and fuzzy queries, and for aggregating
  * results by bookmark tag.
- */
+
+ <p> "@NullMarked" is used here and in {@link Indexer}, {@link StarWarsTester} to define
+ types within this class as non-null by default, therefore, require explicit use of "@Nullable" for potential nulls
+ </p>*/
 @NullMarked
 public class Searcher implements Closeable {
     private final IndexSearcher indexSearcher;
@@ -37,7 +40,6 @@ public class Searcher implements Closeable {
     private float boostFuzzy = LuceneConstants.BOOST_FUZZY;
 
     // Runtime query params
-    private int maxSearch = LuceneConstants.MAX_SEARCH;
     private int phraseSlop = LuceneConstants.PHRASE_QUERY_SLOP;
 
     // Used for BOOLEAN query search, # SHOULD clauses needed to match
@@ -81,13 +83,11 @@ public class Searcher implements Closeable {
     /**
      * Sets general query parameters used by constructed queries.
      *
-     * @param maxSearch       maximum number of hits to return
      * @param phraseSlop      phrase slop for phrase queries
      * @param minShouldMatch  minimum number of SHOULD clauses that must match
      * @param fuzzyEdits      maximum allowed Levenshtein edits for fuzzy queries (0..2)
      */
-    public void setQueryParams(int maxSearch, int phraseSlop, int minShouldMatch, int fuzzyEdits) {
-        if (maxSearch > 0) this.maxSearch = maxSearch;
+    public void setQueryParams(int phraseSlop, int minShouldMatch, int fuzzyEdits) {
         if (phraseSlop >= 0) this.phraseSlop = phraseSlop;
         if (minShouldMatch >= 0) this.minShouldMatch = minShouldMatch;
         if (fuzzyEdits >= 0 && fuzzyEdits <= 2) this.fuzzyEdits = fuzzyEdits;
@@ -99,8 +99,8 @@ public class Searcher implements Closeable {
      * @param query Lucene query to execute
      * @return top docs limited by {@code maxSearch}
      */
-    public TopDocs search(Query query) throws IOException {
-        return indexSearcher.search(query, this.maxSearch);
+    public TopDocs search(Query query, int maxSearch) throws IOException {
+        return indexSearcher.search(query, maxSearch);
     }
 
     /**
@@ -127,7 +127,7 @@ public class Searcher implements Closeable {
             // Retrieve the document's bookmark tag ID
             String proc_id = document.get(LuceneConstants.BOOKMARK_TAG);
 
-            // Retrieve start and end time of when text is said
+            // Retrieve start and end time of when the text is said
             IndexableField startField = document.getField(LuceneConstants.START);
             Number startNum = startField != null ? startField.numericValue() : null;
             IndexableField endField = document.getField(LuceneConstants.END);
